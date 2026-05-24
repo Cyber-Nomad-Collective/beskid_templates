@@ -1,0 +1,12 @@
+workspace {
+  name     = "{{workspaceName}}"
+  resolver = v1
+}
+
+member "app" {
+  path = "app"
+}
+
+member "lib" {
+  path = "lib"
+}

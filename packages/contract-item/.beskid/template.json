@@ -1,0 +1,21 @@
+{
+  "schema": "beskid.template.v1",
+  "identity": "beskid.templates.contract-item::1.0.0",
+  "name": "Contract stub",
+  "shortName": "contract",
+  "description": "Add a contract file inside an existing project",
+  "tags": { "type": "item" },
+  "symbols": {
+    "contractName": {
+      "type": "string",
+      "description": "Contract identifier (file base name)",
+      "isRequired": true
+    }
+  },
+  "sources": [
+    {
+      "source": "./item/Contract.bd",
+      "target": "./Src/{{contractName}}.bd"
+    }
+  ]
+}

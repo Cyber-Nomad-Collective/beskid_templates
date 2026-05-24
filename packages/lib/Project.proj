@@ -1,0 +1,9 @@
+project {
+  name    = "beskid-templates-lib"
+  version = "0.0.0"
+  type    = Template
+  template {
+    shortName = "lib"
+    identity  = "beskid.templates.lib"
+  }
+}

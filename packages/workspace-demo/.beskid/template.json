@@ -1,0 +1,17 @@
+{
+  "schema": "beskid.template.v1",
+  "identity": "beskid.templates.workspace-demo::1.0.0",
+  "name": "Two-member workspace",
+  "shortName": "workspace-demo",
+  "description": "Workspace with app and library members",
+  "tags": { "type": "workspace" },
+  "symbols": {
+    "workspaceName": {
+      "type": "string",
+      "description": "Workspace name",
+      "defaultValue": "MyWorkspace",
+      "isRequired": true
+    }
+  },
+  "sources": [{ "source": "./workspace/", "target": "./" }]
+}

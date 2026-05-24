@@ -1,0 +1,21 @@
+{
+  "schema": "beskid.template.v1",
+  "identity": "beskid.templates.project::1.0.0",
+  "name": "Beskid Template Package",
+  "shortName": "template",
+  "description": "Scaffold a type Template authoring package",
+  "tags": { "type": "project" },
+  "symbols": {
+    "name": {
+      "type": "string",
+      "description": "Package / template identity slug",
+      "isRequired": true
+    },
+    "shortName": {
+      "type": "string",
+      "description": "CLI short name",
+      "isRequired": true
+    }
+  },
+  "sources": [{ "source": "./content/", "target": "./" }]
+}

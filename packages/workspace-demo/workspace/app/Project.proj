@@ -1,0 +1,15 @@
+project {
+  name    = "{{workspaceName}}App"
+  version = "0.1.0"
+  root    = "Src"
+}
+
+target "app" {
+  kind  = App
+  entry = "Main.bd"
+}
+
+dependency "{{workspaceName}}Lib" {
+  source = path
+  path   = "../lib"
+}

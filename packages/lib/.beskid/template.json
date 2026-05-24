@@ -1,0 +1,18 @@
+{
+  "schema": "beskid.template.v1",
+  "identity": "beskid.templates.lib::1.0.0",
+  "name": "Beskid Class Library",
+  "shortName": "lib",
+  "description": "Class library with Lib target",
+  "tags": { "type": "project" },
+  "sourceName": "MyLib",
+  "symbols": {
+    "name": {
+      "type": "string",
+      "description": "Project name",
+      "isRequired": true,
+      "defaultValue": "MyLib"
+    }
+  },
+  "sources": [{ "source": "./content/", "target": "./" }]
+}

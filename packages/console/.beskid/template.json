@@ -1,0 +1,22 @@
+{
+  "schema": "beskid.template.v1",
+  "identity": "beskid.templates.console::1.0.0",
+  "name": "Beskid Console Application",
+  "shortName": "console",
+  "description": "Executable app with Main.bd and App target",
+  "tags": { "type": "project" },
+  "sourceName": "MyApp",
+  "symbols": {
+    "name": {
+      "type": "string",
+      "description": "Project name",
+      "defaultValue": "MyApp",
+      "isRequired": true
+    }
+  },
+  "sources": [{ "source": "./content/", "target": "./" }],
+  "postActions": [
+    { "actionId": "beskidLock", "args": {} },
+    { "actionId": "openReadme", "args": { "path": "README.md" } }
+  ]
+}

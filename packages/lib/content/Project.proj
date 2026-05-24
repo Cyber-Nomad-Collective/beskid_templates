@@ -1,0 +1,10 @@
+project {
+  name    = "{{name}}"
+  version = "0.1.0"
+  root    = "Src"
+}
+
+target "lib" {
+  kind  = Lib
+  entry = "Lib.bd"
+}

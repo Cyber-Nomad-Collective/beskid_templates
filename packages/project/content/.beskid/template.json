@@ -1,0 +1,17 @@
+{
+  "schema": "beskid.template.v1",
+  "identity": "{{name}}::0.1.0",
+  "name": "{{name}}",
+  "shortName": "{{shortName}}",
+  "description": "Complete this template manifest",
+  "tags": { "type": "project" },
+  "symbols": {
+    "name": {
+      "type": "string",
+      "description": "Output project name",
+      "isRequired": true,
+      "defaultValue": "MyTemplate"
+    }
+  },
+  "sources": [{ "source": "./content/", "target": "./" }]
+}

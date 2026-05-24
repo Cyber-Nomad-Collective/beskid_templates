@@ -1,0 +1,9 @@
+project {
+  name    = "beskid-templates-console"
+  version = "0.0.0"
+  type    = Template
+  template {
+    shortName = "console"
+    identity  = "beskid.templates.console"
+  }
+}

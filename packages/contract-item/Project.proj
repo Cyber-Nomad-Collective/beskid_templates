@@ -1,0 +1,9 @@
+project {
+  name    = "beskid-templates-contract-item"
+  version = "0.0.0"
+  type    = Template
+  template {
+    shortName = "contract"
+    identity  = "beskid.templates.contract-item"
+  }
+}

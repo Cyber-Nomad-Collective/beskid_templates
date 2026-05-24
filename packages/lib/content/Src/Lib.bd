@@ -1,0 +1,5 @@
+// Library root for {{name}}.
+
+pub type Placeholder {
+    value: i32
+}
