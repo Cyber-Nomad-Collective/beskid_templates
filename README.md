@@ -54,10 +54,9 @@ beskid new install beskid.templates.console
 
 ## CI
 
-- **quality** — `python -m nox -s quality` validates `workspace.package.json`, every `.beskid/template.json`, and content policy (no corelib opt-out).
-- **publish** — `ci/publish_templates.py` (skeleton) will pack and upload the workspace bundle to **pckg** when `BESKID_PCKG_API_KEY` is set, mirroring [corelib publish](../compiler/corelib/ci/publish_corelib.py).
+CI is centralized in the superrepo with shared Dagger pipelines (`beskid_infra/dagger/`).
 
-Required secrets for publish on `main` / `v*` tags: `BESKID_PCKG_KEY` (mapped to `BESKID_PCKG_API_KEY` in the workflow).
+Required secret for publish lanes: `BESKID_PCKG_KEY` (mapped to `BESKID_PCKG_API_KEY`).
 
 ## Workspace
 
