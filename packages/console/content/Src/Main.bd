@@ -1,4 +1,4 @@
-// Entry point for {{name}}.
+/// Entry point for {{name}}.
 
 fn main() -> i32 {
     return 0;

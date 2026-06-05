@@ -1,4 +1,4 @@
-// App member of workspace {{workspaceName}}.
+/// App member of workspace {{workspaceName}}.
 
 fn main() -> i32 {
     return 0;
