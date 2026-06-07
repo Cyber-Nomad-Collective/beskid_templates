@@ -1,4 +1,4 @@
-project {
+beskid-templates-contract-item {
   name    = "beskid-templates-contract-item"
   version = "0.0.0"
   type    = Template

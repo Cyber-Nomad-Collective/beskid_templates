@@ -1,4 +1,4 @@
-project {
+{{workspaceName}}Lib {
   name    = "{{workspaceName}}Lib"
   version = "0.1.0"
   root    = "Src"

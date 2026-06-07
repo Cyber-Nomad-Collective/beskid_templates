@@ -1,4 +1,4 @@
-project {
+beskid-templates-console {
   name    = "beskid-templates-console"
   version = "0.0.0"
   type    = Template
