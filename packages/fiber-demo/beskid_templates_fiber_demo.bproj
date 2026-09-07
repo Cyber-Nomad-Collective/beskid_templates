@@ -1,5 +1,5 @@
-beskid-templates-fiber-demo {
-  name    = "beskid-templates-fiber-demo"
+beskid_templates_fiber_demo {
+  name    = "beskid_templates_fiber_demo"
   version = "0.0.0"
   type    = Template
   template {

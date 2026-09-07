@@ -18,16 +18,16 @@ Repository: [Cyber-Nomad-Collective/beskid_templates](https://github.com/Cyber-N
 
 Each member is a **`type: Template`** authoring tree:
 
-- `Project.proj` — workspace member manifest (`project.template { shortName, identity }`)
+- `<project.name>.bproj` — canonical workspace member manifest (`template { shortName, identity }`)
 - `.beskid/template.json` — authoritative engine manifest (`beskid.template.v1`)
 - `content/` (or `workspace/`, `item/`) — scaffold sources copied on instantiation
 
-Template roots are **not** runnable with `beskid build`; CI validates manifests and generated content policy, then (when wired) instantiates output and builds that tree.
+Template roots are **not** runnable with `beskid build`; publication packs each member as a separate template artifact, promoting `.beskid/template.json` to the artifact-root `template.json` required by pckg.
 
 ## Authoring rules
 
 - Use **`{{symbolId}}`** placeholders only (no alternate delimiter engines).
-- Do **not** emit `noCorelib`, `useCorelib: false`, or other corelib opt-out keys in generated `Project.proj` files. Host projects resolve **corelib** implicitly on `beskid lock` / fetch.
+- Do **not** emit `noCorelib`, `useCorelib: false`, or other corelib opt-out keys in generated `.bproj` files. Host projects resolve **corelib** implicitly on `beskid lock` / fetch.
 - Avoid embedding foreign template engine schemas or .NET-style token syntax in sources.
 - Keep `.beskid/template.json` out of generated output unless a source block intentionally copies it for documentation.
 
@@ -35,7 +35,7 @@ Normative contracts: [design model](https://beskid-lang.org/platform-spec/toolin
 
 ## Local development (CLI)
 
-When the Beskid CLI implements project templates:
+The Beskid CLI discovers and instantiates these packages from pckg:
 
 ```bash
 # List first-party templates from the registry
@@ -54,12 +54,18 @@ Registry install (after publish):
 beskid new install beskid.templates.console
 ```
 
-## CI
+## CI and publication
 
-CI is centralized in the superrepo with shared Dagger pipelines (`beskid_infra/dagger/`).
+CI is centralized in the superrepo's native `Corelib and templates` workflow. The publisher validates and packs every production corelib and first-party template artifact before the first registry write.
 
 Required secret for publish lanes: `BESKID_PCKG_KEY` (mapped to `BESKID_PCKG_API_KEY`).
 
+From an initialized superrepo checkout, validate the complete publication set without credentials or registry mutation:
+
+```bash
+bash scripts/ci/corelib-publish.sh --dry-run
+```
+
 ## Workspace
 
-`Workspace.proj` lists all template members. `workspace.package.json` (`beskid.workspace.package.v1`) describes registry metadata for future workspace-bundle publish.
+`beskid_templates.bws` lists all template members. `workspace.package.json` (`beskid.workspace.package.v1`) is the single metadata source for the seven per-package registry publications.

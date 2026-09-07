@@ -12,26 +12,26 @@ WORKSPACE_MANIFEST = ROOT / "beskid_templates.bws"
 WORKSPACE_PACKAGE_JSON = ROOT / "workspace.package.json"
 
 TEMPLATE_MEMBERS: tuple[tuple[str, str, str, str], ...] = (
-    ("console", "packages/console", "beskid-templates-console", "beskid.templates.console"),
-    ("lib", "packages/lib", "beskid-templates-lib", "beskid.templates.lib"),
-    ("project", "packages/project", "beskid-templates-project", "beskid.templates.project"),
+    ("console", "packages/console", "beskid_templates_console", "beskid.templates.console"),
+    ("lib", "packages/lib", "beskid_templates_lib", "beskid.templates.lib"),
+    ("project", "packages/project", "beskid_templates_project", "beskid.templates.project"),
     (
         "workspace_demo",
         "packages/workspace-demo",
-        "beskid-templates-workspace-demo",
+        "beskid_templates_workspace_demo",
         "beskid.templates.workspace-demo",
     ),
     (
         "contract_item",
         "packages/contract-item",
-        "beskid-templates-contract-item",
+        "beskid_templates_contract_item",
         "beskid.templates.contract-item",
     ),
-    ("host", "packages/host", "beskid-templates-host", "beskid.templates.host"),
+    ("host", "packages/host", "beskid_templates_host", "beskid.templates.host"),
     (
         "fiber_demo",
         "packages/fiber-demo",
-        "beskid-templates-fiber-demo",
+        "beskid_templates_fiber_demo",
         "beskid.templates.fiber-demo",
     ),
 )
@@ -110,7 +110,7 @@ def _scan_forbidden_corelib_optout(directory: Path) -> None:
     for path in directory.rglob("*"):
         if not path.is_file():
             continue
-        if path.suffix not in {".proj", ".bd", ".md", ".json"}:
+        if path.suffix not in {".bproj", ".bd", ".md", ".json"}:
             continue
         if path.name == "template.json" and ".beskid" in path.parts:
             continue
@@ -148,6 +148,9 @@ def main() -> None:
         proj = manifest.read_text(encoding="utf-8")
         if _project_field(proj, "name") != project_name:
             raise SystemExit(f"{manifest}: project.name must be {project_name!r}")
+        root_block = re.match(r"\s*([A-Za-z_][A-Za-z0-9_]*)\s*\{", proj)
+        if root_block is None or root_block.group(1) != project_name:
+            raise SystemExit(f"{manifest}: root block must match project.name {project_name!r}")
         if _project_field(proj, "type") != "Template":
             raise SystemExit(f"{manifest}: project.type must be Template")
 

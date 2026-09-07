@@ -1,5 +1,5 @@
-beskid-templates-workspace-demo {
-  name    = "beskid-templates-workspace-demo"
+beskid_templates_workspace_demo {
+  name    = "beskid_templates_workspace_demo"
   version = "0.0.0"
   type    = Template
   template {

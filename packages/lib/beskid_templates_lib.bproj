@@ -1,5 +1,5 @@
-beskid-templates-lib {
-  name    = "beskid-templates-lib"
+beskid_templates_lib {
+  name    = "beskid_templates_lib"
   version = "0.0.0"
   type    = Template
   template {

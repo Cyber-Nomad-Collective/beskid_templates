@@ -1,5 +1,5 @@
-beskid-templates-contract-item {
-  name    = "beskid-templates-contract-item"
+beskid_templates_contract_item {
+  name    = "beskid_templates_contract_item"
   version = "0.0.0"
   type    = Template
   template {

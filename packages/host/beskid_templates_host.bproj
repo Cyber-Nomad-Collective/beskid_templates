@@ -1,5 +1,5 @@
-beskid-templates-host {
-  name    = "beskid-templates-host"
+beskid_templates_host {
+  name    = "beskid_templates_host"
   version = "0.0.0"
   type    = Template
   template {

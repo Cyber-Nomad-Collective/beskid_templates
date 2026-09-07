@@ -1,5 +1,5 @@
-beskid-templates-console {
-  name    = "beskid-templates-console"
+beskid_templates_console {
+  name    = "beskid_templates_console"
   version = "0.0.0"
   type    = Template
   template {
