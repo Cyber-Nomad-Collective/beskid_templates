@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_MANIFEST = ROOT / "Workspace.proj"
+WORKSPACE_MANIFEST = ROOT / "beskid_templates.bws"
 WORKSPACE_PACKAGE_JSON = ROOT / "workspace.package.json"
 REPOSITORY_BASE = "https://github.com/Cyber-Nomad-Collective/beskid_templates/tree/main"
 
@@ -66,6 +66,20 @@ WORKSPACE_PACKAGES: tuple[WorkspacePackageMeta, ...] = (
         "Contract file item template for existing projects.",
         ("template", "beskid", "contract", "item"),
     ),
+    WorkspacePackageMeta(
+        "beskid.templates.host",
+        "host",
+        "packages/host",
+        "Console host with a dependency-injection registry and launch entry.",
+        ("template", "beskid", "host", "composition", "project"),
+    ),
+    WorkspacePackageMeta(
+        "beskid.templates.fiber-demo",
+        "fiber_demo",
+        "packages/fiber-demo",
+        "Spawn a cooperative fiber and join its result.",
+        ("template", "beskid", "fiber", "spawn", "project"),
+    ),
 )
 
 
@@ -88,10 +102,10 @@ def _project_field(content: str, key: str) -> str | None:
 
 
 def _validate_workspace_packages(workspace_root: Path) -> None:
-    workspace_text = (workspace_root / "Workspace.proj").read_text(encoding="utf-8")
+    workspace_text = (workspace_root / "beskid_templates.bws").read_text(encoding="utf-8")
     workspace_name = _project_field(workspace_text, "name")
     if workspace_name != "beskid_templates":
-        raise SystemExit(f"Workspace.proj name must be 'beskid_templates', got {workspace_name!r}")
+        raise SystemExit(f"beskid_templates.bws name must be 'beskid_templates', got {workspace_name!r}")
 
     workspace_package = json.loads(
         (workspace_root / "workspace.package.json").read_text(encoding="utf-8")
@@ -101,10 +115,10 @@ def _validate_workspace_packages(workspace_root: Path) -> None:
         raise SystemExit("workspace.package.json must declare members")
 
     for meta in WORKSPACE_PACKAGES:
-        manifest = workspace_root / meta.source_rel / "Project.proj"
+        manifest = workspace_root / meta.source_rel / f"{meta.registry_name.replace('.', '-')}.bproj"
         template_json = workspace_root / meta.source_rel / ".beskid" / "template.json"
         if not manifest.is_file():
-            raise SystemExit(f"Missing Project.proj for {meta.registry_name}: {manifest}")
+            raise SystemExit(f"Missing member manifest for {meta.registry_name}: {manifest}")
         if not template_json.is_file():
             raise SystemExit(f"Missing .beskid/template.json for {meta.registry_name}: {template_json}")
         if _project_field(manifest.read_text(encoding="utf-8"), "type") != "Template":

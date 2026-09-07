@@ -1,0 +1,22 @@
+{
+	"schema": "beskid.template.v1",
+	"identity": "beskid.templates.host::1.0.0",
+	"name": "Beskid Host Composition",
+	"shortName": "host",
+	"description": "Console host with a dependency-injection registry and launch entry",
+	"tags": { "type": "project" },
+	"sourceName": "MyHost",
+	"symbols": {
+		"name": {
+			"type": "string",
+			"description": "Project name",
+			"defaultValue": "MyHost",
+			"isRequired": true
+		}
+	},
+	"sources": [{ "source": "./content/", "target": "./" }],
+	"postActions": [
+		{ "actionId": "beskidLock", "args": {} },
+		{ "actionId": "openReadme", "args": { "path": "README.md" } }
+	]
+}

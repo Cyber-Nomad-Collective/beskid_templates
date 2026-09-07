@@ -1,0 +1,9 @@
+beskid-templates-fiber-demo {
+  name    = "beskid-templates-fiber-demo"
+  version = "0.0.0"
+  type    = Template
+  template {
+    shortName = "fiber-demo"
+    identity  = "beskid.templates.fiber-demo"
+  }
+}

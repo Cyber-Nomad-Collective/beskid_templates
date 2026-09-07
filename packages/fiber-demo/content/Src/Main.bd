@@ -1,0 +1,14 @@
+/// Fiber spawn and join demo for {{name}}.
+
+use Concurrency.Fiber;
+use Concurrency.FiberError;
+
+i64 Worker() {
+    return 42;
+}
+
+i32 Main() {
+    Fiber<i64> fiber = spawn Worker();
+    fiber.Join();
+    return 0;
+}

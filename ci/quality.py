@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKSPACE_MANIFEST = ROOT / "Workspace.proj"
+WORKSPACE_MANIFEST = ROOT / "beskid_templates.bws"
 WORKSPACE_PACKAGE_JSON = ROOT / "workspace.package.json"
 
 TEMPLATE_MEMBERS: tuple[tuple[str, str, str, str], ...] = (
@@ -26,6 +26,13 @@ TEMPLATE_MEMBERS: tuple[tuple[str, str, str, str], ...] = (
         "packages/contract-item",
         "beskid-templates-contract-item",
         "beskid.templates.contract-item",
+    ),
+    ("host", "packages/host", "beskid-templates-host", "beskid.templates.host"),
+    (
+        "fiber_demo",
+        "packages/fiber-demo",
+        "beskid-templates-fiber-demo",
+        "beskid.templates.fiber-demo",
     ),
 )
 
@@ -120,7 +127,7 @@ def main() -> None:
 
     workspace_text = WORKSPACE_MANIFEST.read_text(encoding="utf-8")
     if _project_field(workspace_text, "name") != "beskid_templates":
-        raise SystemExit("Workspace.proj name must be beskid_templates")
+        raise SystemExit("beskid_templates.bws name must be beskid_templates")
 
     workspace_package = json.loads(WORKSPACE_PACKAGE_JSON.read_text(encoding="utf-8"))
     if workspace_package.get("schema") != "beskid.workspace.package.v1":
@@ -131,10 +138,10 @@ def main() -> None:
 
     for member_id, source_rel, project_name, registry_id in TEMPLATE_MEMBERS:
         member_root = ROOT / source_rel
-        manifest = member_root / "Project.proj"
+        manifest = member_root / f"{project_name}.bproj"
         template_json = member_root / ".beskid" / "template.json"
         if not manifest.is_file():
-            raise SystemExit(f"Missing Project.proj: {manifest}")
+            raise SystemExit(f"Missing member manifest: {manifest}")
         if not template_json.is_file():
             raise SystemExit(f"Missing template manifest: {template_json}")
 
@@ -156,7 +163,7 @@ def main() -> None:
         _validate_template_manifest(template_json, registry_id)
 
         for child in member_root.iterdir():
-            if child.name in {".beskid", "Project.proj"}:
+            if child.name == ".beskid" or child.suffix == ".bproj":
                 continue
             if child.is_dir():
                 _scan_forbidden_corelib_optout(child)

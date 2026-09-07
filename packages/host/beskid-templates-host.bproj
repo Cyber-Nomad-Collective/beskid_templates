@@ -1,0 +1,9 @@
+beskid-templates-host {
+  name    = "beskid-templates-host"
+  version = "0.0.0"
+  type    = Template
+  template {
+    shortName = "host"
+    identity  = "beskid.templates.host"
+  }
+}

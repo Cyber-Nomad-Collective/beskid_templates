@@ -13,6 +13,8 @@ Repository: [Cyber-Nomad-Collective/beskid_templates](https://github.com/Cyber-N
 | `packages/project` | `beskid.templates.project` | `template` | `project` |
 | `packages/workspace-demo` | `beskid.templates.workspace-demo` | `workspace-demo` | `workspace` |
 | `packages/contract-item` | `beskid.templates.contract-item` | `contract` | `item` |
+| `packages/host` | `beskid.templates.host` | `host` | `project` |
+| `packages/fiber-demo` | `beskid.templates.fiber-demo` | `fiber-demo` | `project` |
 
 Each member is a **`type: Template`** authoring tree:
 

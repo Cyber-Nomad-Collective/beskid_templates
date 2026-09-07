@@ -1,0 +1,22 @@
+{
+	"schema": "beskid.template.v1",
+	"identity": "beskid.templates.fiber-demo::1.0.0",
+	"name": "Beskid Fiber Demo",
+	"shortName": "fiber-demo",
+	"description": "Spawn a cooperative fiber and join its result",
+	"tags": { "type": "project" },
+	"sourceName": "MyFiberDemo",
+	"symbols": {
+		"name": {
+			"type": "string",
+			"description": "Project name",
+			"defaultValue": "MyFiberDemo",
+			"isRequired": true
+		}
+	},
+	"sources": [{ "source": "./content/", "target": "./" }],
+	"postActions": [
+		{ "actionId": "beskidLock", "args": {} },
+		{ "actionId": "openReadme", "args": { "path": "README.md" } }
+	]
+}

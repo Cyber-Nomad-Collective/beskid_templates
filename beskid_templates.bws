@@ -22,3 +22,11 @@ member "workspace_demo" {
 member "contract_item" {
   path = "packages/contract-item"
 }
+
+member "host" {
+  path = "packages/host"
+}
+
+member "fiber_demo" {
+  path = "packages/fiber-demo"
+}

@@ -30,6 +30,18 @@
 			"description": "Contract file item template for existing projects.",
 			"category": "Template",
 			"tags": ["template", "beskid", "contract", "item"]
+		},
+		"host": {
+			"package": "beskid.templates.host",
+			"description": "Console host with a dependency-injection registry and launch entry.",
+			"category": "Template",
+			"tags": ["template", "beskid", "host", "composition", "project"]
+		},
+		"fiber_demo": {
+			"package": "beskid.templates.fiber-demo",
+			"description": "Spawn a cooperative fiber and join its result.",
+			"category": "Template",
+			"tags": ["template", "beskid", "fiber", "spawn", "project"]
 		}
 	}
 }
