@@ -69,3 +69,7 @@ bash scripts/ci/corelib-publish.sh --dry-run
 ## Workspace
 
 `beskid_templates.bws` lists all template members. `workspace.package.json` (`beskid.workspace.package.v1`) is the single metadata source for the seven per-package registry publications.
+
+## License
+
+Beskid-owned templates are licensed under the [Apache License 2.0](LICENSE).
