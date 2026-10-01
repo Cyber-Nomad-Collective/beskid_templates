@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Strengthen generated-output quality checks to reject signal-terminated parser
+  runs and verify materialized Corelib sources against the supplied root.
 - License all Beskid-owned templates under Apache-2.0.
 - Align template quality and publishing scripts with the current workspace
   manifest layout.

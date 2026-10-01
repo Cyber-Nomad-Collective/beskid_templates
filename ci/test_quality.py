@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +13,24 @@ import quality
 
 
 class GeneratedOutputValidationTests(unittest.TestCase):
+    def test_signal_terminated_parser_output_is_not_a_completed_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script = (
+                "import os, signal; "
+                "print('parse error: expected expression', flush=True); "
+                "os.kill(os.getpid(), signal.SIGTERM)"
+            )
+            with self.assertRaises(quality.QualityFailure) as raised:
+                quality._run_cli(
+                    sys.executable,
+                    ["-c", script],
+                    cwd=Path(temp_dir),
+                    stage="analysis",
+                )
+
+            self.assertEqual(raised.exception.category, "parser")
+            self.assertFalse(raised.exception.completed)
+
     def test_unresolved_tokens_are_found_in_paths_and_text(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -162,10 +182,52 @@ class GeneratedOutputValidationTests(unittest.TestCase):
                 "- name=corelib_runtime;source=corelib;project=packages/runtime;manifest=corelib_runtime.bproj;source_root=src;materialized_root=obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef\n",
                 encoding="utf-8",
             )
+            self._materialize_corelib_fixture(lock, verified)
 
             quality._validate_corelib_lock(lock, verified)
             with self.assertRaisesRegex(quality.QualityFailure, "closure does not match supplied Corelib"):
                 quality._validate_corelib_lock(lock, wrong)
+
+    def test_lock_rejects_same_layout_corelib_when_materialized_sources_are_from_another_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            supplied = base / "supplied-corelib"
+            alternate = base / "alternate-corelib"
+            self._write_corelib_fixture(supplied, with_runtime=True)
+            self._write_corelib_fixture(alternate, with_runtime=True)
+            (supplied / "packages/runtime/src/Runtime.bd").write_text("module Runtime { fn Value() -> i32 { 1 } }\n", encoding="utf-8")
+            (alternate / "packages/runtime/src/Runtime.bd").write_text("module Runtime { fn Value() -> i32 { 2 } }\n", encoding="utf-8")
+
+            output = base / "generated-project"
+            materialized_std = output / "obj/beskid/deps/src/Std-0123456789abcdef0123456789abcdef"
+            materialized_runtime = output / "obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef"
+            materialized_std.mkdir(parents=True)
+            materialized_runtime.mkdir(parents=True)
+            (materialized_std / "corelib.bproj").write_text(
+                (supplied / "beskid_corelib/corelib.bproj").read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            (materialized_runtime / "src").mkdir()
+            (materialized_runtime / "corelib_runtime.bproj").write_text(
+                (supplied / "packages/runtime/corelib_runtime.bproj").read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            (materialized_runtime / "src/Runtime.bd").write_text(
+                (supplied / "packages/runtime/src/Runtime.bd").read_text(encoding="utf-8"), encoding="utf-8"
+            )
+
+            lock = output / "Project.lock"
+            lock.write_text(
+                "# Project.lock v2\n"
+                "root_manifest=App.bproj\n"
+                "project_name=App\n"
+                "dependencies:\n"
+                "- name=Std;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Std-0123456789abcdef0123456789abcdef\n"
+                "- name=corelib_runtime;source=corelib;project=packages/runtime;manifest=corelib_runtime.bproj;source_root=src;materialized_root=obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef\n",
+                encoding="utf-8",
+            )
+
+            quality._validate_corelib_lock(lock, supplied)
+            with self.assertRaisesRegex(quality.QualityFailure, "materialized Corelib sources do not match supplied Corelib"):
+                quality._validate_corelib_lock(lock, alternate)
 
     def test_corelib_provenance_ignores_unreachable_missing_workspace_members(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -212,6 +274,19 @@ class GeneratedOutputValidationTests(unittest.TestCase):
             'workspace {\n  name = "corelib"\n}\n' + "\n".join(workspace_members) + "\n",
             encoding="utf-8",
         )
+
+    @staticmethod
+    def _materialize_corelib_fixture(lock: Path, corelib_root: Path) -> None:
+        for row in quality._read_lock_dependencies(lock):
+            if row["source"] != "corelib":
+                continue
+            source_project = corelib_root / row["project"]
+            if quality._project_field((source_project / row["manifest"]).read_text(encoding="utf-8"), "type") == "Aggregate":
+                continue
+            source = source_project / row["source_root"]
+            destination = lock.parent / row["materialized_root"] / row["source_root"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(source, destination, symlinks=True)
 
     def test_generated_manifest_must_use_the_requested_name_in_file_and_content(self) -> None:
         self.assertTrue(hasattr(quality, "_validate_generated_manifest"))
