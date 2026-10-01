@@ -1,14 +1,16 @@
 /// Fiber spawn and join demo for {{name}}.
 
-use Concurrency.Fiber;
-use Concurrency.FiberError;
+use Std.Concurrency.Fiber;
+use Std.Core.Results;
 
 i64 Worker() {
     return 42;
 }
 
-i32 Main() {
+pub i32 Main() {
     Fiber<i64> fiber = spawn Worker();
-    fiber.Join();
-    return 0;
+    return match fiber.Join() {
+        Result::Ok(42_i64) => 0,
+        _ => 1,
+    };
 }

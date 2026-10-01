@@ -33,7 +33,7 @@
 		},
 		"host": {
 			"package": "beskid.templates.host",
-			"description": "Console host with a dependency-injection registry and launch entry.",
+			"description": "Host composition with a singleton registry and launch entry.",
 			"category": "Template",
 			"tags": ["template", "beskid", "host", "composition", "project"]
 		},

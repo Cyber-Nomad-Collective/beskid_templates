@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Publish all seven templates as independently validated `.bpk` artifacts via
   the superrepo's native corelib-and-templates release lane.
 
+### Fixed
+
+- Repair console and workspace app entrypoints to use the current public `Main`
+  declaration syntax.
+- Generate a runnable host with a default-constructible singleton service and
+  preserve registry activation through `launch`.
+- Import fibers through the implicit `Std` namespace and verify the joined
+  worker result before exiting successfully.
+
 ### Removed
 
 - Remove the obsolete `publish_templates.py` skeleton and its duplicate,

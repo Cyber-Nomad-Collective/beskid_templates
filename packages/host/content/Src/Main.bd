@@ -1,16 +1,14 @@
 /// Host composition entry for {{name}}.
 
-type Logger {
-    i32 value
-}
+pub type Logger {}
 
-host AppHost() : ConsoleHost {
+host AppHost() {
     registry {
         single Logger;
     }
 }
 
-i32 Main() {
+pub i32 Main() {
     launch AppHost();
     return 0;
 }
