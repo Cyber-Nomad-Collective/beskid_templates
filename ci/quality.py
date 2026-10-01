@@ -596,7 +596,12 @@ def _ensure_manifest_and_lock(directory: Path, manifest: Path, cli: str, corelib
     print(f"quality check: lock-owner={owner}:PASS")
 
 
-def _validate_template_authoring_lock_contract(directory: Path, manifest: Path) -> None:
+def _validate_template_authoring_lock_contract(
+    directory: Path,
+    manifest: Path,
+    cli: str,
+    corelib_root: Path,
+) -> None:
     project_type = _project_field(manifest.read_text(encoding="utf-8"), "type")
     if project_type != "Template":
         raise QualityFailure(
@@ -604,13 +609,33 @@ def _validate_template_authoring_lock_contract(directory: Path, manifest: Path) 
             "generation",
             f"{manifest}: template-authoring lock exception requires type=Template, got {project_type!r}",
         )
-    if (directory / "Project.lock").exists():
+
+    lock = directory / "Project.lock"
+    if not lock.is_file():
         raise QualityFailure(
+            "lock",
             "generation",
-            "generation",
-            f"{manifest}: type=Template authoring roots must not have Project.lock",
+            f"{manifest}: generated template-authoring project is missing generated Project.lock",
         )
-    print("quality check: template-root-lock=NOT_APPLICABLE (type=Template authoring root)")
+    try:
+        owner = _read_lock_root_manifest(lock)
+    except (OSError, ValueError) as exc:
+        raise QualityFailure("lock", "generation", str(exc)) from exc
+    if owner != manifest.name:
+        raise QualityFailure(
+            "lock",
+            "generation",
+            f"{lock}: root_manifest must name {manifest.name!r}, got {owner!r}",
+        )
+
+    _validate_corelib_lock(lock, corelib_root)
+    _run_cli(
+        cli,
+        ["fetch", "--project", str(manifest), "--locked", "--plain"],
+        cwd=directory,
+        stage="lock-replay",
+    )
+    print(f"quality check: template-root-lock=PASS (owner={owner}, Corelib closure verified, locked replay)")
 
 
 def _new_template(
@@ -821,11 +846,15 @@ def _check_generated_templates(cli: str, corelib_root: Path) -> list[str]:
             manifest = _project_manifest(output)
             _collect_failure(failures, lambda: _validate_generated_manifest(manifest, value))
             if member == "project":
+                relocated_output = output.parent / "relocated-template-authoring"
+                output.rename(relocated_output)
+                output = relocated_output
+                manifest = output / manifest.name
                 _collect_failure(
                     failures,
-                    lambda: _validate_template_authoring_lock_contract(output, manifest),
+                    lambda: _validate_template_authoring_lock_contract(output, manifest, cli, corelib_root),
                 )
-                print("quality check: project analysis=NOT_APPLICABLE (template authoring package)")
+                print("quality check: project analysis/build=NOT_APPLICABLE (type=Template authoring project has no target)")
                 _raise_collected_failures(failures)
                 return
             executable = member in {"console", "host", "fiber_demo"}
