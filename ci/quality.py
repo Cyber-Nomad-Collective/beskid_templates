@@ -48,10 +48,18 @@ ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 class QualityFailure(RuntimeError):
-    def __init__(self, stage: str, category: str, details: str) -> None:
+    def __init__(
+        self,
+        stage: str,
+        category: str,
+        details: str,
+        *,
+        completed: bool = False,
+    ) -> None:
         super().__init__(details)
         self.stage = stage
         self.category = category
+        self.completed = completed
 
 FORBIDDEN_CORELIB_OPTOUT = re.compile(
     r"\b(noCorelib|useCorelib\s*:\s*false)\b",
@@ -173,6 +181,219 @@ def _read_lock_root_manifest(lock_path: Path) -> str:
     raise ValueError(f"{lock_path}: missing root_manifest")
 
 
+def _lock_fields(encoded_fields: str, context: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for encoded_field in encoded_fields.split(";"):
+        key, separator, value = encoded_field.partition("=")
+        if not separator or not key or key in fields:
+            raise ValueError(f"{context}: malformed or duplicate lock field {encoded_field!r}")
+        try:
+            fields[key] = unquote(value, errors="strict")
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"{context}: lock field {key!r} is not valid UTF-8") from exc
+    return fields
+
+
+def _read_lock_dependencies(lock_path: Path) -> list[dict[str, str]]:
+    lines = lock_path.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0] != "# Project.lock v2":
+        raise ValueError(f"{lock_path}: expected Project.lock v2 header")
+    try:
+        dependency_index = lines.index("dependencies:")
+    except ValueError as exc:
+        raise ValueError(f"{lock_path}: missing dependencies section") from exc
+    dependencies: list[dict[str, str]] = []
+    required = {"name", "source", "project", "manifest", "source_root", "materialized_root"}
+    for line_number, line in enumerate(lines[dependency_index + 1 :], dependency_index + 2):
+        if not line:
+            continue
+        if not line.startswith("- "):
+            raise ValueError(f"{lock_path}:{line_number}: malformed dependency row")
+        fields = _lock_fields(line[2:], f"{lock_path}:{line_number}")
+        missing = required - set(fields)
+        if missing:
+            raise ValueError(f"{lock_path}:{line_number}: missing dependency fields {sorted(missing)}")
+        dependencies.append(fields)
+    return dependencies
+
+
+def _manifest_assignments(block: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in block.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        fields[key.strip()] = value.strip().strip('"')
+    return fields
+
+
+def _corelib_dependency_closure(corelib_root: Path) -> set[tuple[str, str, str, str]]:
+    try:
+        root = corelib_root.expanduser().resolve(strict=True)
+        workspace_path = root / "CoreLib.bws"
+        workspace_text = workspace_path.read_text(encoding="utf-8")
+    except (OSError, RuntimeError) as exc:
+        raise QualityFailure("corelib", "infrastructure", f"cannot read supplied Corelib root {corelib_root}: {exc}") from exc
+
+    if _project_field(workspace_text, "name") != "corelib":
+        raise QualityFailure("corelib", "infrastructure", f"{workspace_path}: workspace name must be 'corelib'")
+
+    member_blocks = re.compile(r'\bmember\s+"([^"]+)"\s*\{([^}]*)\}', re.MULTILINE)
+    members_by_package: dict[str, dict[str, object]] = {}
+    members_by_path: dict[Path, dict[str, object]] = {}
+    for member_id, body in member_blocks.findall(workspace_text):
+        fields = _manifest_assignments(body)
+        relative_path = fields.get("path")
+        package = fields.get("package")
+        if not relative_path or not package:
+            raise QualityFailure("corelib", "infrastructure", f"{workspace_path}: member {member_id!r} lacks path/package")
+        relative = Path(relative_path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise QualityFailure("corelib", "infrastructure", f"{workspace_path}: unsafe member path {relative_path!r}")
+        member_path = (root / relative).resolve(strict=False)
+        if member_path == root or root not in member_path.parents:
+            raise QualityFailure("corelib", "infrastructure", f"{workspace_path}: member path escapes Corelib root: {relative_path!r}")
+        if package in members_by_package or member_path in members_by_path:
+            raise QualityFailure("corelib", "infrastructure", f"{workspace_path}: duplicate member package/path {package!r}")
+        member: dict[str, object] = {
+            "id": member_id,
+            "package": package,
+            "project": relative.as_posix(),
+            "candidate_root": member_path,
+        }
+        members_by_package[package] = member
+        members_by_path[member_path] = member
+
+    aggregate = members_by_package.get("corelib")
+    if aggregate is None:
+        raise QualityFailure("corelib", "infrastructure", f"{workspace_path}: missing Corelib aggregate member")
+    expected: set[tuple[str, str, str, str]] = set()
+    visited: set[str] = set()
+    loaded: dict[str, dict[str, object]] = {}
+
+    def load_member(spec: dict[str, object]) -> dict[str, object]:
+        package = str(spec["package"])
+        if package in loaded:
+            return loaded[package]
+        candidate_root = spec["candidate_root"]
+        assert isinstance(candidate_root, Path)
+        try:
+            member_path = candidate_root.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise QualityFailure("corelib", "infrastructure", f"missing reachable Corelib member {package!r}: {exc}") from exc
+        if member_path == root or root not in member_path.parents:
+            raise QualityFailure("corelib", "infrastructure", f"reachable Corelib member {package!r} escapes supplied root")
+        manifests = [
+            path
+            for path in sorted(member_path.glob("*.bproj"))
+            if _project_field(path.read_text(encoding="utf-8"), "name") == package
+        ]
+        if len(manifests) != 1:
+            raise QualityFailure(
+                "corelib",
+                "infrastructure",
+                f"{workspace_path}: expected one {package!r} manifest in {member_path}, found {len(manifests)}",
+            )
+        manifest = manifests[0]
+        manifest_text = manifest.read_text(encoding="utf-8")
+        source_root = _project_field(manifest_text, "root") or "."
+        source_path = Path(source_root)
+        if source_path.is_absolute() or ".." in source_path.parts:
+            raise QualityFailure("corelib", "infrastructure", f"{manifest}: unsafe source root {source_root!r}")
+        try:
+            resolved_source = (member_path / source_path).resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise QualityFailure("corelib", "infrastructure", f"{manifest}: missing source root {source_root!r}: {exc}") from exc
+        if not resolved_source.is_dir() or (resolved_source != member_path and member_path not in resolved_source.parents):
+            raise QualityFailure("corelib", "infrastructure", f"{manifest}: source root escapes member or is not a directory")
+        member = {
+            **spec,
+            "root": member_path,
+            "manifest": manifest,
+            "source_root": source_root,
+        }
+        loaded[package] = member
+        return member
+
+    aggregate = load_member(aggregate)
+    aggregate_manifest = aggregate["manifest"]
+    assert isinstance(aggregate_manifest, Path)
+    aggregate_text = aggregate_manifest.read_text(encoding="utf-8")
+    if _project_field(aggregate_text, "type") != "Aggregate":
+        raise QualityFailure("corelib", "infrastructure", f"{aggregate_manifest}: Corelib root must be an Aggregate project")
+
+    def visit(member: dict[str, object], dependency_name: str) -> None:
+        member = load_member(member)
+        package = str(member["package"])
+        if package in visited:
+            return
+        visited.add(package)
+        manifest = member["manifest"]
+        assert isinstance(manifest, Path)
+        source_root = str(member["source_root"])
+        lock_name = "Std" if package == "corelib" else dependency_name
+        identity = (lock_name, str(member["project"]), manifest.name, source_root)
+        if identity in expected:
+            raise QualityFailure("corelib", "infrastructure", f"{manifest}: duplicate closure identity {identity!r}")
+        expected.add(identity)
+
+        content = manifest.read_text(encoding="utf-8")
+        dependency_blocks = re.compile(r'\bdependency\s+"([^"]+)"\s*\{([^{}]*)\}', re.MULTILINE)
+        for declared_name, dependency_body in dependency_blocks.findall(content):
+            fields = _manifest_assignments(dependency_body)
+            source = fields.get("source", "path").lower()
+            if source != "path":
+                continue
+            relative = fields.get("path")
+            if not relative:
+                raise QualityFailure("corelib", "infrastructure", f"{manifest}: path dependency {declared_name!r} lacks path")
+            try:
+                dependency_path = (manifest.parent / relative).resolve(strict=True)
+            except (OSError, RuntimeError) as exc:
+                raise QualityFailure("corelib", "infrastructure", f"{manifest}: missing path dependency {relative!r}: {exc}") from exc
+            dependency_spec = members_by_path.get(dependency_path)
+            if dependency_spec is None:
+                raise QualityFailure(
+                    "corelib",
+                    "infrastructure",
+                    f"{manifest}: path dependency {declared_name!r} resolves outside the supplied Corelib workspace",
+                )
+            if dependency_spec["package"] != declared_name:
+                raise QualityFailure(
+                    "corelib",
+                    "infrastructure",
+                    f"{manifest}: dependency {declared_name!r} resolves to workspace package {dependency_spec['package']!r}",
+                )
+            visit(dependency_spec, declared_name)
+
+    visit(aggregate, "Std")
+    return expected
+
+
+def _validate_corelib_lock(lock_path: Path, corelib_root: Path) -> None:
+    try:
+        expected = _corelib_dependency_closure(corelib_root)
+        actual_rows = _read_lock_dependencies(lock_path)
+    except (OSError, ValueError) as exc:
+        raise QualityFailure("corelib", "infrastructure", str(exc)) from exc
+    actual = {
+        (row["name"], row["project"], row["manifest"], row["source_root"])
+        for row in actual_rows
+        if row["source"] == "corelib"
+    }
+    if actual != expected:
+        missing = sorted(expected - actual)
+        unexpected = sorted(actual - expected)
+        raise QualityFailure(
+            "corelib",
+            "infrastructure",
+            f"{lock_path}: corelib lock closure does not match supplied Corelib root {corelib_root}; "
+            f"missing={missing}, unexpected={unexpected}",
+        )
+    print(f"quality check: corelib-closure=PASS ({len(expected)} dependency entries)")
+
+
 def _failure_category(stage: str, output: str) -> str:
     text = ANSI_ESCAPE.sub("", output).lower()
     patterns = (
@@ -241,6 +462,7 @@ def _run_cli(
             stage,
             _failure_category(stage, result.stdout),
             f"{command!r} exited {result.returncode}\n{_diagnostic_excerpt(result.stdout)}",
+            completed=True,
         )
     print(f"quality check: {Path(cli).name} {stage}=PASS")
 
@@ -252,10 +474,14 @@ def _verify_invalid_fixture(cli: str, directory: Path) -> None:
         try:
             _run_cli(cli, ["analyze", str(fixture), "--plain"], cwd=directory, stage="analysis")
         except QualityFailure as failure:
-            if failure.category == "infrastructure":
-                raise QualityFailure("fixture", "infrastructure", f"invalid-source check could not run: {failure}") from failure
-            print(f"quality fixture: intentionally invalid .bd rejected [{failure.category}]")
-            return
+            if failure.category == "parser" and failure.completed:
+                print("quality fixture: intentionally invalid .bd rejected [parser]")
+                return
+            raise QualityFailure(
+                "fixture",
+                failure.category,
+                f"expected a completed parser diagnostic for invalid .bd input; got {failure.category}: {failure}",
+            ) from failure
         raise QualityFailure("fixture", "parser", "CLI accepted intentionally invalid .bd source")
     finally:
         fixture.unlink(missing_ok=True)
@@ -293,7 +519,7 @@ def _validate_generated_workspace(directory: Path, requested_name: str) -> Path:
     return manifest
 
 
-def _ensure_manifest_and_lock(directory: Path, manifest: Path, cli: str) -> None:
+def _ensure_manifest_and_lock(directory: Path, manifest: Path, cli: str, corelib_root: Path) -> None:
     lock = directory / "Project.lock"
     if not lock.is_file():
         _run_cli(cli, ["lock", "--project", str(manifest), "--plain"], cwd=directory, stage="lock")
@@ -307,7 +533,25 @@ def _ensure_manifest_and_lock(directory: Path, manifest: Path, cli: str) -> None
             "generation",
             f"{lock}: root_manifest must name {manifest.name!r}, got {owner!r}",
         )
+    _validate_corelib_lock(lock, corelib_root)
     print(f"quality check: lock-owner={owner}:PASS")
+
+
+def _validate_template_authoring_lock_contract(directory: Path, manifest: Path) -> None:
+    project_type = _project_field(manifest.read_text(encoding="utf-8"), "type")
+    if project_type != "Template":
+        raise QualityFailure(
+            "generation",
+            "generation",
+            f"{manifest}: template-authoring lock exception requires type=Template, got {project_type!r}",
+        )
+    if (directory / "Project.lock").exists():
+        raise QualityFailure(
+            "generation",
+            "generation",
+            f"{manifest}: type=Template authoring roots must not have Project.lock",
+        )
+    print("quality check: template-root-lock=NOT_APPLICABLE (type=Template authoring root)")
 
 
 def _new_template(
@@ -384,6 +628,7 @@ def _raise_collected_failures(failures: list[QualityFailure]) -> None:
 def _check_project(
     cli: str,
     directory: Path,
+    corelib_root: Path,
     *,
     build: bool,
     run: bool,
@@ -392,7 +637,7 @@ def _check_project(
 ) -> Path:
     manifest = _project_manifest(directory)
     _collect_failure(failures, lambda: _validate_generated_manifest(manifest, requested_name))
-    _collect_failure(failures, lambda: _ensure_manifest_and_lock(directory, manifest, cli))
+    _collect_failure(failures, lambda: _ensure_manifest_and_lock(directory, manifest, cli, corelib_root))
     _collect_failure(
         failures,
         lambda: _run_cli(cli, ["analyze", "--project", str(manifest), "--locked", "--plain"], cwd=directory, stage="analysis"),
@@ -421,7 +666,7 @@ def _template_result(name: str, operation) -> None:
     print(f"quality result: {name}: PASS")
 
 
-def _check_generated_templates(cli: str) -> list[str]:
+def _check_generated_templates(cli: str, corelib_root: Path) -> list[str]:
     failures: list[str] = []
     with tempfile.TemporaryDirectory(prefix="beskid-template-quality-") as temp:
         scratch = Path(temp)
@@ -449,8 +694,8 @@ def _check_generated_templates(cli: str) -> list[str]:
                 lib_manifest = _project_manifest(output / "lib")
                 _collect_failure(failures, lambda: _validate_generated_manifest(app_manifest, f"{value}App"))
                 _collect_failure(failures, lambda: _validate_generated_manifest(lib_manifest, f"{value}Lib"))
-                _collect_failure(failures, lambda: _ensure_manifest_and_lock(output / "app", app_manifest, cli))
-                _collect_failure(failures, lambda: _ensure_manifest_and_lock(output / "lib", lib_manifest, cli))
+                _collect_failure(failures, lambda: _ensure_manifest_and_lock(output / "app", app_manifest, cli, corelib_root))
+                _collect_failure(failures, lambda: _ensure_manifest_and_lock(output / "lib", lib_manifest, cli, corelib_root))
                 _collect_failure(
                     failures,
                     lambda: _run_cli(cli, ["analyze", "--project", str(app_manifest), "--locked", "--plain"], cwd=output, stage="analysis"),
@@ -479,7 +724,7 @@ def _check_generated_templates(cli: str) -> list[str]:
                 _collect_failure(failures, lambda: _validate_generated_manifest(host_manifest, "QualityItemHost"))
                 main_source = host / "Src" / "Main.bd"
                 main_source.write_text("pub i32 Main() { return 0; }\n", encoding="utf-8")
-                _collect_failure(failures, lambda: _ensure_manifest_and_lock(host, host_manifest, cli))
+                _collect_failure(failures, lambda: _ensure_manifest_and_lock(host, host_manifest, cli, corelib_root))
                 _collect_failure(
                     failures,
                     lambda: _run_cli(cli, ["analyze", "--project", str(host_manifest), "--locked", "--plain"], cwd=host, stage="analysis"),
@@ -517,11 +762,15 @@ def _check_generated_templates(cli: str) -> list[str]:
             manifest = _project_manifest(output)
             _collect_failure(failures, lambda: _validate_generated_manifest(manifest, value))
             if member == "project":
+                _collect_failure(
+                    failures,
+                    lambda: _validate_template_authoring_lock_contract(output, manifest),
+                )
                 print("quality check: project analysis=NOT_APPLICABLE (template authoring package)")
                 _raise_collected_failures(failures)
                 return
             executable = member in {"console", "host", "fiber_demo"}
-            _check_project(cli, output, build=True, run=executable, failures=failures, requested_name=value)
+            _check_project(cli, output, corelib_root, build=True, run=executable, failures=failures, requested_name=value)
             _raise_collected_failures(failures)
 
         for member, *_ in TEMPLATE_MEMBERS:
@@ -602,9 +851,18 @@ def main() -> int:
     cli = str(Path(args.cli).expanduser().resolve())
     if not Path(cli).is_file() or not os.access(cli, os.X_OK):
         raise SystemExit(f"Candidate Beskid CLI is not executable: {cli}")
-    corelib_root = os.environ.get("BESKID_CORELIB_ROOT", "").strip()
-    if not corelib_root or not (Path(corelib_root) / "CoreLib.bws").is_file():
+    corelib_root_value = os.environ.get("BESKID_CORELIB_ROOT", "").strip()
+    if not corelib_root_value:
         raise SystemExit("BESKID_CORELIB_ROOT is required for generated-output quality")
+    try:
+        corelib_root = Path(corelib_root_value).expanduser().resolve(strict=True)
+        if not corelib_root.is_dir() or not (corelib_root / "CoreLib.bws").is_file():
+            raise QualityFailure("corelib", "infrastructure", "BESKID_CORELIB_ROOT must contain CoreLib.bws")
+        _corelib_dependency_closure(corelib_root)
+    except (OSError, RuntimeError, QualityFailure) as failure:
+        print(f"quality FAIL [infrastructure]: {failure}")
+        return 1
+    os.environ["BESKID_CORELIB_ROOT"] = str(corelib_root)
     print(f"quality CLI: {cli}")
     if args.verify_invalid_fixture:
         try:
@@ -614,7 +872,7 @@ def main() -> int:
             print(f"quality FAIL [{failure.category}]: {failure}")
             return 1
     try:
-        _check_generated_templates(cli)
+        _check_generated_templates(cli, corelib_root)
     except QualityFailure as failure:
         print(f"quality FAIL [{failure.category}]: {failure}")
         return 1
