@@ -182,7 +182,7 @@ class GeneratedOutputValidationTests(unittest.TestCase):
                 "root_manifest=Authoring.bproj\n"
                 "project_name=Authoring\n"
                 "dependencies:\n"
-                "- name=Std;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Std-0123456789abcdef0123456789abcdef\n",
+                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Core-0123456789abcdef0123456789abcdef\n",
                 encoding="utf-8",
             )
             self._materialize_corelib_fixture(lock, corelib)
@@ -203,7 +203,7 @@ class GeneratedOutputValidationTests(unittest.TestCase):
                 "root_manifest=Authoring.bproj\n"
                 "project_name=Authoring\n"
                 "dependencies:\n"
-                "- name=Std;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Std-0123456789abcdef0123456789abcdef\n"
+                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Core-0123456789abcdef0123456789abcdef\n"
                 "- name=corelib_runtime;source=corelib;project=packages/runtime;manifest=corelib_runtime.bproj;source_root=src;materialized_root=obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef\n",
                 encoding="utf-8",
             )
@@ -214,7 +214,7 @@ class GeneratedOutputValidationTests(unittest.TestCase):
 
             run_cli.assert_called_once_with(
                 "/candidate/beskid",
-                ["fetch", "--project", str(manifest), "--locked", "--plain"],
+                ["dev", "project", "fetch", "--project", str(manifest), "--locked", "--plain"],
                 cwd=root,
                 stage="lock-replay",
             )
@@ -232,7 +232,7 @@ class GeneratedOutputValidationTests(unittest.TestCase):
                 "root_manifest=App.bproj\n"
                 "project_name=App\n"
                 "dependencies:\n"
-                "- name=Std;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Std-0123456789abcdef0123456789abcdef\n"
+                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Core-0123456789abcdef0123456789abcdef\n"
                 "- name=corelib_runtime;source=corelib;project=packages/runtime;manifest=corelib_runtime.bproj;source_root=src;materialized_root=obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef\n",
                 encoding="utf-8",
             )
@@ -256,7 +256,7 @@ class GeneratedOutputValidationTests(unittest.TestCase):
             output.mkdir()
             manifest = output / "Authoring.bproj"
             manifest.write_text('Authoring {\n  name = "Authoring"\n  type = Template\n}\n', encoding="utf-8")
-            materialized_std = output / "obj/beskid/deps/src/Std-0123456789abcdef0123456789abcdef"
+            materialized_std = output / "obj/beskid/deps/src/Core-0123456789abcdef0123456789abcdef"
             materialized_runtime = output / "obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef"
             materialized_std.mkdir(parents=True)
             materialized_runtime.mkdir(parents=True)
@@ -277,7 +277,7 @@ class GeneratedOutputValidationTests(unittest.TestCase):
                 "root_manifest=Authoring.bproj\n"
                 "project_name=Authoring\n"
                 "dependencies:\n"
-                "- name=Std;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Std-0123456789abcdef0123456789abcdef\n"
+                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Core-0123456789abcdef0123456789abcdef\n"
                 "- name=corelib_runtime;source=corelib;project=packages/runtime;manifest=corelib_runtime.bproj;source_root=src;materialized_root=obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef\n",
                 encoding="utf-8",
             )
@@ -303,10 +303,57 @@ class GeneratedOutputValidationTests(unittest.TestCase):
             self.assertEqual(
                 closure,
                 {
-                    ("Std", "beskid_corelib", "corelib.bproj", "."),
+                    ("Core", "beskid_corelib", "corelib.bproj", "."),
                     ("corelib_runtime", "packages/runtime", "corelib_runtime.bproj", "src"),
                 },
             )
+
+    def test_inline_path_dependencies_join_the_corelib_closure(self) -> None:
+        self.assertEqual(
+            quality._manifest_assignments(' source = path path = "../../mods/serialization_mod" '),
+            {"source": "path", "path": "../../mods/serialization_mod"},
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "corelib"
+            self._write_corelib_fixture(root, with_runtime=True)
+            runtime_manifest = root / "packages" / "runtime" / "corelib_runtime.bproj"
+            runtime_manifest.write_text(
+                runtime_manifest.read_text(encoding="utf-8")
+                + 'dependency "serialization_mod" { source = path path = "../../mods/serialization_mod" }\n',
+                encoding="utf-8",
+            )
+            mod = root / "mods" / "serialization_mod"
+            (mod / "Src").mkdir(parents=True)
+            (mod / "serialization_mod.bproj").write_text(
+                'serialization_mod {\n  name = "serialization_mod"\n  root = "Src"\n  type = Mod\n}\n',
+                encoding="utf-8",
+            )
+            workspace = root / "CoreLib.bws"
+            workspace.write_text(
+                workspace.read_text(encoding="utf-8")
+                + 'member "serialization_mod" {\n  path = "mods/serialization_mod"\n  package = "serialization_mod"\n}\n',
+                encoding="utf-8",
+            )
+
+            closure = quality._corelib_dependency_closure(root)
+
+            self.assertIn(("serialization_mod", "mods/serialization_mod", "serialization_mod.bproj", "Src"), closure)
+
+    def test_new_passes_the_primary_name_as_the_required_positional_argument(self) -> None:
+        captured: dict[str, list[str]] = {}
+
+        def inspect_cli(_cli: str, arguments: list[str], **_kwargs: object) -> None:
+            captured["arguments"] = arguments
+
+        with patch("quality._run_cli", side_effect=inspect_cli):
+            quality._new_template("/fake/beskid", "packages/project", Path("/out"), "Authoring", {"shortName": "a"})
+
+        arguments = captured["arguments"]
+        self.assertEqual(arguments[:2], ["new", "Authoring"])
+        self.assertNotIn("--name", arguments)
+        self.assertEqual(arguments[arguments.index("--symbol") + 1], "shortName=a")
+        with self.assertRaisesRegex(ValueError, "positional NAME"):
+            quality._new_template("/fake/beskid", "packages/project", Path("/out"), "A", {"name": "B"})
 
     @staticmethod
     def _write_corelib_fixture(root: Path, *, with_runtime: bool) -> None:

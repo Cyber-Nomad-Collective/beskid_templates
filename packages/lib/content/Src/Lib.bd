@@ -1,5 +1,5 @@
 /// Library root for {{name}}.
 
 pub type Placeholder {
-    i32 value;
+    i32 value,
 }

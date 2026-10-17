@@ -7,7 +7,7 @@ Defines `AppHost` with a singleton `Logger` registry entry and launches it from
 constructor when a service needs value fields.
 
 ```bash
-beskid lock
+beskid check
 beskid build
 beskid run
 ```

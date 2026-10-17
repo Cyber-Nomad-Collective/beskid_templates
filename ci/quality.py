@@ -44,6 +44,8 @@ TEMPLATE_MEMBERS: tuple[tuple[str, str, str, str], ...] = (
 )
 
 TIMEOUT_SECONDS = 120
+# Lock dependency name of the Corelib aggregate root (`use Core.*`) in 0.6.
+CORELIB_AGGREGATE_LOCK_NAME = "Core"
 TOKEN = re.compile(r"\{\{[^{}]+\}\}")
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
@@ -218,14 +220,22 @@ def _read_lock_dependencies(lock_path: Path) -> list[dict[str, str]]:
     return dependencies
 
 
+_MANIFEST_ASSIGNMENT = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*("[^"]*"|\[[^\]]*\]|[^\s{}]+)')
+
+
 def _manifest_assignments(block: str) -> dict[str, str]:
+    """Parse ``key = value`` pairs from a manifest block body.
+
+    Blocks may be written one assignment per line or inline, e.g.
+    ``dependency "x" { source = path path = "../x" }``.
+    """
     fields: dict[str, str] = {}
     for line in block.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in stripped:
+        if not stripped or stripped.startswith("#"):
             continue
-        key, value = stripped.split("=", 1)
-        fields[key.strip()] = value.strip().strip('"')
+        for key, value in _MANIFEST_ASSIGNMENT.findall(stripped):
+            fields[key] = value.strip('"')
     return fields
 
 
@@ -333,7 +343,7 @@ def _corelib_dependency_closure(corelib_root: Path) -> set[tuple[str, str, str, 
         manifest = member["manifest"]
         assert isinstance(manifest, Path)
         source_root = str(member["source_root"])
-        lock_name = "Std" if package == "corelib" else dependency_name
+        lock_name = CORELIB_AGGREGATE_LOCK_NAME if package == "corelib" else dependency_name
         identity = (lock_name, str(member["project"]), manifest.name, source_root)
         if identity in expected:
             raise QualityFailure("corelib", "infrastructure", f"{manifest}: duplicate closure identity {identity!r}")
@@ -368,7 +378,7 @@ def _corelib_dependency_closure(corelib_root: Path) -> set[tuple[str, str, str, 
                 )
             visit(dependency_spec, declared_name)
 
-    visit(aggregate, "Std")
+    visit(aggregate, CORELIB_AGGREGATE_LOCK_NAME)
     return expected
 
 
@@ -415,7 +425,7 @@ def _validate_corelib_materializations(
             raise QualityFailure("corelib", "infrastructure", f"{lock_path}: Corelib project escapes supplied root")
         source_manifest = source_project / row["manifest"]
         if _project_field(source_manifest.read_text(encoding="utf-8"), "type") == "Aggregate":
-            # Aggregate roots (currently `Std`) carry dependency declarations and
+            # Aggregate roots (currently `Core`) carry dependency declarations and
             # docs, not compiler source. Their reachable member projects below
             # provide the materialized source provenance checks.
             continue
@@ -531,7 +541,7 @@ def _verify_invalid_fixture(cli: str, directory: Path) -> None:
     fixture.write_text("fn Main( -> i32 { return 0; }\n", encoding="utf-8")
     try:
         try:
-            _run_cli(cli, ["analyze", str(fixture), "--plain"], cwd=directory, stage="analysis")
+            _run_cli(cli, ["check", str(fixture), "--plain"], cwd=directory, stage="analysis")
         except QualityFailure as failure:
             if failure.category == "parser" and failure.completed:
                 print("quality fixture: intentionally invalid .bd rejected [parser]")
@@ -581,7 +591,7 @@ def _validate_generated_workspace(directory: Path, requested_name: str) -> Path:
 def _ensure_manifest_and_lock(directory: Path, manifest: Path, cli: str, corelib_root: Path) -> None:
     lock = directory / "Project.lock"
     if not lock.is_file():
-        _run_cli(cli, ["lock", "--project", str(manifest), "--plain"], cwd=directory, stage="lock")
+        _run_cli(cli, ["dev", "project", "lock", "--project", str(manifest), "--plain"], cwd=directory, stage="lock")
     try:
         owner = _read_lock_root_manifest(lock)
     except (OSError, ValueError) as exc:
@@ -631,7 +641,7 @@ def _validate_template_authoring_lock_contract(
     _validate_corelib_lock(lock, corelib_root)
     _run_cli(
         cli,
-        ["fetch", "--project", str(manifest), "--locked", "--plain"],
+        ["dev", "project", "fetch", "--project", str(manifest), "--locked", "--plain"],
         cwd=directory,
         stage="lock-replay",
     )
@@ -642,13 +652,19 @@ def _new_template(
     cli: str,
     template: str,
     output: Path,
+    name: str,
     symbols: dict[str, str],
     *,
-    primary_name: str | None = None,
     project_manifest: Path | None = None,
 ) -> None:
+    """Instantiate ``template`` with the 0.6 ``beskid new <NAME>`` shape.
+
+    The positional ``NAME`` is required by the 0.6 CLI and binds the
+    template's primary ``name`` symbol; other symbols use ``--symbol``.
+    """
     arguments = [
         "new",
+        name,
         "--path",
         str(ROOT / template),
         "--output",
@@ -658,10 +674,9 @@ def _new_template(
     ]
     if project_manifest is not None:
         arguments.extend(["--project", str(project_manifest)])
-    if primary_name is not None:
-        arguments.extend(["--name", primary_name])
-        symbols = {key: value for key, value in symbols.items() if key != "name"}
     for key, value in symbols.items():
+        if key == "name":
+            raise ValueError("bind the primary name symbol through the positional NAME argument")
         arguments.extend(["--symbol", f"{key}={value}"])
     _run_cli(cli, arguments, cwd=ROOT, stage="generation")
 
@@ -677,6 +692,7 @@ def _generate_item_template(
         cli,
         template,
         host_directory,
+        contract_name,
         {"contractName": contract_name},
         project_manifest=project_manifest,
     )
@@ -724,7 +740,7 @@ def _check_project(
     _collect_failure(failures, lambda: _ensure_manifest_and_lock(directory, manifest, cli, corelib_root))
     _collect_failure(
         failures,
-        lambda: _run_cli(cli, ["analyze", "--project", str(manifest), "--locked", "--plain"], cwd=directory, stage="analysis"),
+        lambda: _run_cli(cli, ["check", "--project", str(manifest), "--locked", "--plain"], cwd=directory, stage="analysis"),
     )
     if build:
         _collect_failure(
@@ -771,7 +787,7 @@ def _check_generated_templates(cli: str, corelib_root: Path) -> list[str]:
             value = names[member][0]
             failures: list[QualityFailure] = []
             if member == "workspace_demo":
-                _new_template(cli, source_rel, output, {"workspaceName": value})
+                _new_template(cli, source_rel, output, value, {"workspaceName": value})
                 _collect_failure(failures, lambda: _assert_generated_clean(output))
                 _collect_failure(failures, lambda: _validate_generated_workspace(output, value))
                 app_manifest = _project_manifest(output / "app")
@@ -782,7 +798,7 @@ def _check_generated_templates(cli: str, corelib_root: Path) -> list[str]:
                 _collect_failure(failures, lambda: _ensure_manifest_and_lock(output / "lib", lib_manifest, cli, corelib_root))
                 _collect_failure(
                     failures,
-                    lambda: _run_cli(cli, ["analyze", "--project", str(app_manifest), "--locked", "--plain"], cwd=output, stage="analysis"),
+                    lambda: _run_cli(cli, ["check", "--project", str(app_manifest), "--locked", "--plain"], cwd=output, stage="analysis"),
                 )
                 _collect_failure(
                     failures,
@@ -800,8 +816,8 @@ def _check_generated_templates(cli: str, corelib_root: Path) -> list[str]:
                     cli,
                     "packages/console",
                     host,
+                    "QualityItemHost",
                     {},
-                    primary_name="QualityItemHost",
                 )
                 _collect_failure(failures, lambda: _assert_generated_clean(host))
                 host_manifest = _project_manifest(host)
@@ -811,7 +827,7 @@ def _check_generated_templates(cli: str, corelib_root: Path) -> list[str]:
                 _collect_failure(failures, lambda: _ensure_manifest_and_lock(host, host_manifest, cli, corelib_root))
                 _collect_failure(
                     failures,
-                    lambda: _run_cli(cli, ["analyze", "--project", str(host_manifest), "--locked", "--plain"], cwd=host, stage="analysis"),
+                    lambda: _run_cli(cli, ["check", "--project", str(host_manifest), "--locked", "--plain"], cwd=host, stage="analysis"),
                 )
                 target = host / "Src" / f"{value}.bd"
                 _generate_item_template(
@@ -828,17 +844,15 @@ def _check_generated_templates(cli: str, corelib_root: Path) -> list[str]:
                     failures.append(QualityFailure("generation", "generation", f"item output path must be {value}.bd, got {target.name}"))
                 _collect_failure(
                     failures,
-                    lambda: _run_cli(cli, ["analyze", "--project", str(host_manifest), "--locked", "--plain"], cwd=host, stage="analysis"),
+                    lambda: _run_cli(cli, ["check", "--project", str(host_manifest), "--locked", "--plain"], cwd=host, stage="analysis"),
                 )
                 _raise_collected_failures(failures)
                 return
 
             symbols: dict[str, str] = {}
-            primary_name = value
             if member == "project":
-                primary_name = None
-                symbols = {"name": value, "shortName": "quality-authoring"}
-            _new_template(cli, source_rel, output, symbols, primary_name=primary_name)
+                symbols = {"shortName": "quality-authoring"}
+            _new_template(cli, source_rel, output, value, symbols)
             # The project template intentionally emits another template source
             # tree whose symbols must remain available to its future users.
             allowed = (".beskid/template.json", "content") if member == "project" else ()

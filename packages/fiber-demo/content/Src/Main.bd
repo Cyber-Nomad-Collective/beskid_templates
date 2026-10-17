@@ -1,7 +1,7 @@
 /// Fiber spawn and join demo for {{name}}.
 
-use Std.Concurrency.Fiber;
-use Std.Core.Results;
+use Concurrency.Fiber;
+use Core.Results;
 
 i64 Worker() {
     return 42;

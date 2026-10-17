@@ -27,7 +27,7 @@ Template roots are **not** runnable with `beskid build`; publication packs each 
 ## Authoring rules
 
 - Use **`{{symbolId}}`** placeholders only (no alternate delimiter engines).
-- Do **not** emit `noCorelib`, `useCorelib: false`, or other corelib opt-out keys in generated `.bproj` files. Host projects resolve **corelib** implicitly on `beskid lock` / fetch.
+- Do **not** emit `noCorelib`, `useCorelib: false`, or other corelib opt-out keys in generated `.bproj` files. Host projects resolve **corelib** implicitly when `beskid new` writes `Project.lock` and on every `beskid check`, `build`, or `run`.
 - Avoid embedding foreign template engine schemas or .NET-style token syntax in sources.
 - Keep `.beskid/template.json` out of generated output unless a source block intentionally copies it for documentation.
 
@@ -38,20 +38,20 @@ Normative contracts: [design model](https://beskid-lang.org/platform-spec/toolin
 The Beskid CLI discovers and instantiates these packages from pckg:
 
 ```bash
-# List first-party templates from the registry
-beskid new list
+# List available templates
+beskid new --list
 
 # Instantiate by short name
-beskid new console -n MyGame -o ./MyGame
+beskid new MyGame --template console -o ./MyGame
 
 # Use this repository without publishing
-beskid new --path ./packages/console -n Demo -o ./Demo
+beskid new Demo --path ./packages/console -o ./Demo
 ```
 
 Registry install (after publish):
 
 ```bash
-beskid new install beskid.templates.console
+beskid package template install beskid.templates.console
 ```
 
 ## CI and publication

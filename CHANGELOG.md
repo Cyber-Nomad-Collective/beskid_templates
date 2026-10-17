@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Port the template quality gate and first-party templates to the 0.6 CLI:
+  `check` replaces `analyze`, `dev project lock`/`fetch` replace `lock`/`fetch`,
+  `beskid new` takes the positional project name, the Corelib aggregate locks as
+  `Core`, inline manifest dependency blocks join the Corelib closure, the fiber
+  demo imports `Core.Results`/`Concurrency.Fiber`, and type fields use `,`.
 - Strengthen generated-output quality checks to reject signal-terminated parser
   runs and verify materialized Corelib sources against the supplied root.
 - License all Beskid-owned templates under Apache-2.0.
