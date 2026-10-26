@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import sys
 import tempfile
 import unittest
@@ -47,22 +46,22 @@ class GeneratedOutputValidationTests(unittest.TestCase):
                 ["{{folder}}", "{{folder}}/{{name}}.bd", "{{folder}}/{{name}}.bd:content"],
             )
 
-    def test_lock_root_manifest_is_read_from_v2_header_data(self) -> None:
+    def test_lock_root_manifest_is_read_from_v3_header_data(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             lock = Path(temp_dir) / "Project.lock"
             lock.write_text(
-                "# Project.lock v2\nroot_manifest=Starter.bproj\nproject_name=Starter\n",
+                "# Project.lock v3\nroot_manifest=Starter.bproj\nproject_name=Starter\n",
                 encoding="utf-8",
             )
 
             self.assertTrue(hasattr(quality, "_read_lock_root_manifest"))
             self.assertEqual(quality._read_lock_root_manifest(lock), "Starter.bproj")
 
-    def test_lock_root_manifest_decodes_project_lock_v2_path_escapes(self) -> None:
+    def test_lock_root_manifest_decodes_project_lock_v3_path_escapes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             lock = Path(temp_dir) / "Project.lock"
             lock.write_text(
-                "# Project.lock v2\nroot_manifest=%7B%7Bname%7D%7D.bproj\n",
+                "# Project.lock v3\nroot_manifest=%7B%7Bname%7D%7D.bproj\n",
                 encoding="utf-8",
             )
 
@@ -71,7 +70,7 @@ class GeneratedOutputValidationTests(unittest.TestCase):
     def test_lock_without_root_manifest_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             lock = Path(temp_dir) / "Project.lock"
-            lock.write_text("# Project.lock v2\nproject_name=Starter\n", encoding="utf-8")
+            lock.write_text("# Project.lock v3\nproject_name=Starter\n", encoding="utf-8")
 
             self.assertTrue(hasattr(quality, "_read_lock_root_manifest"))
             with self.assertRaisesRegex(ValueError, "root_manifest"):
@@ -162,7 +161,7 @@ class GeneratedOutputValidationTests(unittest.TestCase):
             manifest = root / "Authoring.bproj"
             manifest.write_text('Authoring {\n  name = "Authoring"\n  type = Template\n}\n', encoding="utf-8")
             (root / "Project.lock").write_text(
-                "# Project.lock v2\nroot_manifest=Other.bproj\nproject_name=Other\ndependencies:\n",
+                "# Project.lock v3\nroot_manifest=Other.bproj\nproject_name=Other\ndependencies:\n",
                 encoding="utf-8",
             )
 
@@ -178,14 +177,13 @@ class GeneratedOutputValidationTests(unittest.TestCase):
             manifest.write_text('Authoring {\n  name = "Authoring"\n  type = Template\n}\n', encoding="utf-8")
             lock = root / "Project.lock"
             lock.write_text(
-                "# Project.lock v2\n"
+                "# Project.lock v3\n"
                 "root_manifest=Authoring.bproj\n"
                 "project_name=Authoring\n"
                 "dependencies:\n"
-                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Core-0123456789abcdef0123456789abcdef\n",
+                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.\n",
                 encoding="utf-8",
             )
-            self._materialize_corelib_fixture(lock, corelib)
 
             with self.assertRaisesRegex(quality.QualityFailure, "closure does not match supplied Corelib"):
                 quality._validate_template_authoring_lock_contract(root, manifest, "/fake/beskid", corelib)
@@ -199,15 +197,14 @@ class GeneratedOutputValidationTests(unittest.TestCase):
             manifest.write_text('Authoring {\n  name = "Authoring"\n  type = Template\n}\n', encoding="utf-8")
             lock = root / "Project.lock"
             lock.write_text(
-                "# Project.lock v2\n"
+                "# Project.lock v3\n"
                 "root_manifest=Authoring.bproj\n"
                 "project_name=Authoring\n"
                 "dependencies:\n"
-                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Core-0123456789abcdef0123456789abcdef\n"
-                "- name=corelib_runtime;source=corelib;project=packages/runtime;manifest=corelib_runtime.bproj;source_root=src;materialized_root=obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef\n",
+                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.\n"
+                "- name=corelib_runtime;source=corelib;project=packages/runtime;manifest=corelib_runtime.bproj;source_root=src\n",
                 encoding="utf-8",
             )
-            self._materialize_corelib_fixture(lock, corelib)
 
             with patch("quality._run_cli") as run_cli:
                 quality._validate_template_authoring_lock_contract(root, manifest, "/candidate/beskid", corelib)
@@ -228,64 +225,37 @@ class GeneratedOutputValidationTests(unittest.TestCase):
             self._write_corelib_fixture(wrong, with_runtime=False)
             lock = base / "Project.lock"
             lock.write_text(
-                "# Project.lock v2\n"
+                "# Project.lock v3\n"
                 "root_manifest=App.bproj\n"
                 "project_name=App\n"
                 "dependencies:\n"
-                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Core-0123456789abcdef0123456789abcdef\n"
-                "- name=corelib_runtime;source=corelib;project=packages/runtime;manifest=corelib_runtime.bproj;source_root=src;materialized_root=obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef\n",
+                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.\n"
+                "- name=corelib_runtime;source=corelib;project=packages/runtime;manifest=corelib_runtime.bproj;source_root=src\n",
                 encoding="utf-8",
             )
-            self._materialize_corelib_fixture(lock, verified)
 
             quality._validate_corelib_lock(lock, verified)
             with self.assertRaisesRegex(quality.QualityFailure, "closure does not match supplied Corelib"):
                 quality._validate_corelib_lock(lock, wrong)
 
-    def test_template_authoring_root_rejects_materialized_sources_from_another_corelib_root(self) -> None:
+    def test_corelib_rows_must_read_the_shared_corelib_in_place(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             base = Path(temp_dir)
-            supplied = base / "supplied-corelib"
-            alternate = base / "alternate-corelib"
-            self._write_corelib_fixture(supplied, with_runtime=True)
-            self._write_corelib_fixture(alternate, with_runtime=True)
-            (supplied / "packages/runtime/src/Runtime.bd").write_text("module Runtime { fn Value() -> i32 { 1 } }\n", encoding="utf-8")
-            (alternate / "packages/runtime/src/Runtime.bd").write_text("module Runtime { fn Value() -> i32 { 2 } }\n", encoding="utf-8")
-
-            output = base / "generated-project"
-            output.mkdir()
-            manifest = output / "Authoring.bproj"
-            manifest.write_text('Authoring {\n  name = "Authoring"\n  type = Template\n}\n', encoding="utf-8")
-            materialized_std = output / "obj/beskid/deps/src/Core-0123456789abcdef0123456789abcdef"
-            materialized_runtime = output / "obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef"
-            materialized_std.mkdir(parents=True)
-            materialized_runtime.mkdir(parents=True)
-            (materialized_std / "corelib.bproj").write_text(
-                (supplied / "beskid_corelib/corelib.bproj").read_text(encoding="utf-8"), encoding="utf-8"
-            )
-            (materialized_runtime / "src").mkdir()
-            (materialized_runtime / "corelib_runtime.bproj").write_text(
-                (supplied / "packages/runtime/corelib_runtime.bproj").read_text(encoding="utf-8"), encoding="utf-8"
-            )
-            (materialized_runtime / "src/Runtime.bd").write_text(
-                (supplied / "packages/runtime/src/Runtime.bd").read_text(encoding="utf-8"), encoding="utf-8"
-            )
-
-            lock = output / "Project.lock"
+            corelib = base / "corelib"
+            self._write_corelib_fixture(corelib, with_runtime=True)
+            lock = base / "Project.lock"
             lock.write_text(
-                "# Project.lock v2\n"
-                "root_manifest=Authoring.bproj\n"
-                "project_name=Authoring\n"
+                "# Project.lock v3\n"
+                "root_manifest=App.bproj\n"
+                "project_name=App\n"
                 "dependencies:\n"
-                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.;materialized_root=obj/beskid/deps/src/Core-0123456789abcdef0123456789abcdef\n"
+                "- name=Core;source=corelib;project=beskid_corelib;manifest=corelib.bproj;source_root=.\n"
                 "- name=corelib_runtime;source=corelib;project=packages/runtime;manifest=corelib_runtime.bproj;source_root=src;materialized_root=obj/beskid/deps/src/runtime-0123456789abcdef0123456789abcdef\n",
                 encoding="utf-8",
             )
 
-            with patch("quality._run_cli"):
-                quality._validate_template_authoring_lock_contract(output, manifest, "/fake/beskid", supplied)
-            with self.assertRaisesRegex(quality.QualityFailure, "materialized Corelib sources do not match supplied Corelib"):
-                quality._validate_template_authoring_lock_contract(output, manifest, "/fake/beskid", alternate)
+            with self.assertRaisesRegex(quality.QualityFailure, "read the shared Corelib in place"):
+                quality._validate_corelib_lock(lock, corelib)
 
     def test_corelib_provenance_ignores_unreachable_missing_workspace_members(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -379,19 +349,6 @@ class GeneratedOutputValidationTests(unittest.TestCase):
             'workspace {\n  name = "corelib"\n}\n' + "\n".join(workspace_members) + "\n",
             encoding="utf-8",
         )
-
-    @staticmethod
-    def _materialize_corelib_fixture(lock: Path, corelib_root: Path) -> None:
-        for row in quality._read_lock_dependencies(lock):
-            if row["source"] != "corelib":
-                continue
-            source_project = corelib_root / row["project"]
-            if quality._project_field((source_project / row["manifest"]).read_text(encoding="utf-8"), "type") == "Aggregate":
-                continue
-            source = source_project / row["source_root"]
-            destination = lock.parent / row["materialized_root"] / row["source_root"]
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(source, destination, symlinks=True)
 
     def test_generated_manifest_must_use_the_requested_name_in_file_and_content(self) -> None:
         self.assertTrue(hasattr(quality, "_validate_generated_manifest"))

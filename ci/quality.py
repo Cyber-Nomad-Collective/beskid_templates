@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import re
@@ -46,6 +45,8 @@ TEMPLATE_MEMBERS: tuple[tuple[str, str, str, str], ...] = (
 TIMEOUT_SECONDS = 120
 # Lock dependency name of the Corelib aggregate root (`use Core.*`) in 0.6.
 CORELIB_AGGREGATE_LOCK_NAME = "Core"
+# 0.6.7 lock format: Corelib rows name the toolchain's shared Corelib, read in place.
+LOCK_HEADER = "# Project.lock v3"
 TOKEN = re.compile(r"\{\{[^{}]+\}\}")
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
@@ -172,8 +173,8 @@ def _find_unresolved_tokens(
 
 def _read_lock_root_manifest(lock_path: Path) -> str:
     lines = lock_path.read_text(encoding="utf-8").splitlines()
-    if not lines or lines[0] != "# Project.lock v2":
-        raise ValueError(f"{lock_path}: expected Project.lock v2 header")
+    if not lines or lines[0] != LOCK_HEADER:
+        raise ValueError(f"{lock_path}: expected {LOCK_HEADER!r} header")
     for line in lines[1:]:
         key, separator, value = line.partition("=")
         if separator and key == "root_manifest" and value:
@@ -199,14 +200,14 @@ def _lock_fields(encoded_fields: str, context: str) -> dict[str, str]:
 
 def _read_lock_dependencies(lock_path: Path) -> list[dict[str, str]]:
     lines = lock_path.read_text(encoding="utf-8").splitlines()
-    if not lines or lines[0] != "# Project.lock v2":
-        raise ValueError(f"{lock_path}: expected Project.lock v2 header")
+    if not lines or lines[0] != LOCK_HEADER:
+        raise ValueError(f"{lock_path}: expected {LOCK_HEADER!r} header")
     try:
         dependency_index = lines.index("dependencies:")
     except ValueError as exc:
         raise ValueError(f"{lock_path}: missing dependencies section") from exc
     dependencies: list[dict[str, str]] = []
-    required = {"name", "source", "project", "manifest", "source_root", "materialized_root"}
+    required = {"name", "source", "project", "manifest", "source_root"}
     for line_number, line in enumerate(lines[dependency_index + 1 :], dependency_index + 2):
         if not line:
             continue
@@ -402,65 +403,14 @@ def _validate_corelib_lock(lock_path: Path, corelib_root: Path) -> None:
             f"{lock_path}: corelib lock closure does not match supplied Corelib root {corelib_root}; "
             f"missing={missing}, unexpected={unexpected}",
         )
-    try:
-        canonical_root = corelib_root.expanduser().resolve(strict=True)
-        project_root = lock_path.parent.resolve(strict=True)
-        _validate_corelib_materializations(lock_path, canonical_root, project_root, actual_rows)
-    except (OSError, RuntimeError) as exc:
-        raise QualityFailure("corelib", "infrastructure", f"cannot validate Corelib materialization: {exc}") from exc
+    copied = [row["name"] for row in actual_rows if row["source"] == "corelib" and "materialized_root" in row]
+    if copied:
+        raise QualityFailure(
+            "corelib",
+            "infrastructure",
+            f"{lock_path}: Corelib rows must read the shared Corelib in place, but {copied} name a per-project copy",
+        )
     print(f"quality check: corelib-closure=PASS ({len(expected)} dependency entries)")
-
-
-def _validate_corelib_materializations(
-    lock_path: Path,
-    canonical_root: Path,
-    project_root: Path,
-    actual_rows: list[dict[str, str]],
-) -> None:
-    for row in actual_rows:
-        if row["source"] != "corelib":
-            continue
-        source_project = (canonical_root / row["project"]).resolve(strict=True)
-        if source_project == canonical_root or canonical_root not in source_project.parents:
-            raise QualityFailure("corelib", "infrastructure", f"{lock_path}: Corelib project escapes supplied root")
-        source_manifest = source_project / row["manifest"]
-        if _project_field(source_manifest.read_text(encoding="utf-8"), "type") == "Aggregate":
-            # Aggregate roots (currently `Core`) carry dependency declarations and
-            # docs, not compiler source. Their reachable member projects below
-            # provide the materialized source provenance checks.
-            continue
-        source_root = Path(row["source_root"])
-        materialized_root = Path(row["materialized_root"])
-        if (
-            source_root.is_absolute()
-            or ".." in source_root.parts
-            or materialized_root.is_absolute()
-            or ".." in materialized_root.parts
-        ):
-            raise QualityFailure("corelib", "infrastructure", f"{lock_path}: unsafe Corelib materialization path")
-        source = (source_project / source_root).resolve(strict=True)
-        materialized = (project_root / materialized_root / source_root).resolve(strict=True)
-        if canonical_root not in source.parents or project_root not in materialized.parents:
-            raise QualityFailure("corelib", "infrastructure", f"{lock_path}: Corelib materialization escapes its owner")
-        if not source.is_dir() or not materialized.is_dir():
-            raise QualityFailure("corelib", "infrastructure", f"{lock_path}: Corelib materialized source root is missing")
-        if _directory_signature(source) != _directory_signature(materialized):
-            raise QualityFailure(
-                "corelib",
-                "infrastructure",
-                f"{lock_path}: materialized Corelib sources do not match supplied Corelib at {row['project']}/{row['source_root']}",
-            )
-
-
-def _directory_signature(directory: Path) -> dict[str, tuple[str, str]]:
-    signature: dict[str, tuple[str, str]] = {}
-    for path in sorted(directory.rglob("*")):
-        relative = path.relative_to(directory).as_posix()
-        if path.is_symlink():
-            signature[relative] = ("symlink", os.readlink(path))
-        elif path.is_file():
-            signature[relative] = ("file", hashlib.sha256(path.read_bytes()).hexdigest())
-    return signature
 
 
 def _failure_category(stage: str, output: str) -> str:
