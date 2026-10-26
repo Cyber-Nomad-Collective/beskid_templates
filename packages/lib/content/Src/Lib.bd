@@ -1,5 +1,6 @@
-/// Library root for {{name}}.
+// Library root for {{name}}.
 
-pub type Placeholder {
-    i32 value,
+pub type Placeholder
+{
+    i32 value;
 }

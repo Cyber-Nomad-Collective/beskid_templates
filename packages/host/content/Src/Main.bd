@@ -1,14 +1,17 @@
-/// Host composition entry for {{name}}.
+// Host composition entry for {{name}}.
 
-pub type Logger {}
+pub type Logger { }
 
-host AppHost() {
-    registry {
+host AppHost()
+{
+    registry
+    {
         single Logger;
     }
 }
 
-pub i32 Main() {
+pub i32 Main()
+{
     launch AppHost();
     return 0;
 }

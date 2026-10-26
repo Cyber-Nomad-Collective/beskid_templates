@@ -1,5 +1,6 @@
-/// App member of workspace {{workspaceName}}.
+// App member of workspace {{workspaceName}}.
 
-pub i32 Main() {
+pub i32 Main()
+{
     return 0;
 }

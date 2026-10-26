@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 0.6.7: the file header of the console, lib, host, fiber-demo and workspace-demo
+  sources is a `//` comment; a `///` header followed by a blank line is attached
+  to no item and fails with E0117. Type fields end with `;` (the workspace lib's
+  `value: i32` was not valid Beskid), and every source is printed by the 0.6.7
+  `beskid fmt`.
+
 - Port the template quality gate and first-party templates to the 0.6 CLI:
   `check` replaces `analyze`, `dev project lock`/`fetch` replace `lock`/`fetch`,
   `beskid new` takes the positional project name, the Corelib aggregate locks as

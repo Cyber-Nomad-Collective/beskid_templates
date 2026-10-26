@@ -1,5 +1,6 @@
-/// Entry point for {{name}}.
+// Entry point for {{name}}.
 
-pub i32 Main() {
+pub i32 Main()
+{
     return 0;
 }

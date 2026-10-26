@@ -1,3 +1,2 @@
 /// Contract stub for {{contractName}}.
-contract {{contractName}} {
-}
+contract {{contractName}} { }

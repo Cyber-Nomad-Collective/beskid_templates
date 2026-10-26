@@ -1,5 +1,6 @@
-/// Library member of workspace {{workspaceName}}.
+// Library member of workspace {{workspaceName}}.
 
-pub type Shared {
-    value: i32
+pub type Shared
+{
+    i32 value;
 }
