@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `console` template ships a `tests` target (`kind = Test`, `Src/MainTests.bd`)
+  and its README lists `beskid test`. The quality gate runs `beskid test` on every
+  Test target of each generated project, fails when a target runs no tests or a
+  test fails, and requires the target for `console`.
 - Add first-party `host` and `fiber-demo` project template packages and register
   them in the template workspace metadata.
 
@@ -19,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to no item and fails with E0117. Type fields end with `;` (the workspace lib's
   `value: i32` was not valid Beskid), and every source is printed by the 0.6.7
   `beskid fmt`.
+- The quality gate classifies a parse diagnostic that names the construct being
+  parsed (`... while parsing parameters of Main`) as a parser failure, so the
+  `--verify-invalid-fixture` self-check passes with the 0.6.7 CLI.
 - The quality gate reads 0.6.7 `Project.lock` v3 files: Corelib rows name the
   toolchain's shared Corelib, read in place, and a row with a per-project copy
   fails.

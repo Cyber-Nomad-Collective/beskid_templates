@@ -1,0 +1,9 @@
+// Tests for {{name}}. Run them with `beskid test`.
+
+use Main;
+use Testing.Assert;
+
+test MainExitsWithSuccess
+{
+    Assert.Equal(Main.Main(), 0, "exit code");
+}

@@ -115,6 +115,11 @@ class GeneratedOutputValidationTests(unittest.TestCase):
                 with self.assertRaisesRegex(quality.QualityFailure, "completed parser diagnostic"):
                     quality._verify_invalid_fixture("/fake/beskid", Path(temp_dir))
 
+    def test_parser_diagnostic_naming_the_construct_being_parsed_is_a_parser_failure(self) -> None:
+        output = "E0101\n  x expected `)`, an expression or other syntax while parsing parameters of `Main`, found `->`"
+
+        self.assertEqual(quality._failure_category("analysis", output), "parser")
+
     def test_missing_library_entrypoint_is_classified_as_semantic_analysis(self) -> None:
         self.assertTrue(hasattr(quality, "_failure_category"))
         self.assertEqual(
@@ -363,6 +368,78 @@ class GeneratedOutputValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(quality.QualityFailure, "requested name"):
                 quality._validate_generated_manifest(manifest, "OtherApp")
 
+
+    def test_test_targets_are_the_kind_test_blocks_in_manifest_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest = Path(temp_dir) / "QualityLibrary.bproj"
+            manifest.write_text(
+                'QualityLibrary {\n  name = "QualityLibrary"\n  root = "Src"\n}\n\n'
+                'target "lib" {\n  kind  = Lib\n  entry = "Lib.bd"\n}\n\n'
+                'target "tests" {\n  kind  = Test\n  entry = "LibTests.bd"\n}\n\n'
+                'target "more" { kind = Test entry = "More.bd" }\n',
+                encoding="utf-8",
+            )
+
+            self.assertEqual(quality._test_targets(manifest), ["tests", "more"])
+
+    def test_passed_test_count_reads_the_last_result_line(self) -> None:
+        output = "running 2 tests\nResult: passed=2, failed=0, skipped=0, filtered_out=0, timed_out=0\n"
+
+        self.assertEqual(quality._passed_test_count(output, "QualityLibrary"), 2)
+
+    def test_passed_test_count_rejects_missing_results_failures_and_empty_targets(self) -> None:
+        with self.assertRaisesRegex(quality.QualityFailure, "no result line"):
+            quality._passed_test_count("compiled\n", "QualityLibrary")
+        with self.assertRaisesRegex(quality.QualityFailure, "1 test\\(s\\) failed"):
+            quality._passed_test_count("Result: passed=3, failed=1, skipped=0\n", "QualityLibrary")
+        with self.assertRaisesRegex(quality.QualityFailure, "ran no tests"):
+            quality._passed_test_count("Result: passed=0, failed=0, skipped=1\n", "QualityLibrary")
+
+    def test_project_tests_run_every_test_target_locked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            manifest = directory / "QualityConsoleApp.bproj"
+            manifest.write_text(
+                'QualityConsoleApp {\n  name = "QualityConsoleApp"\n}\n\n'
+                'target "app" {\n  kind  = App\n  entry = "Main.bd"\n}\n\n'
+                'target "tests" {\n  kind  = Test\n  entry = "MainTests.bd"\n}\n',
+                encoding="utf-8",
+            )
+            calls: list[list[str]] = []
+
+            def fake_test(_cli: str, arguments: list[str], **_kwargs: object) -> str:
+                calls.append(arguments)
+                return "Result: passed=1, failed=0, skipped=0\n"
+
+            with patch("quality._run_cli", side_effect=fake_test):
+                quality._run_project_tests("/fake/beskid", directory, manifest, required=True)
+
+            self.assertEqual(
+                calls,
+                [["test", "--project", str(manifest), "--target", "tests", "--locked", "--plain"]],
+            )
+
+    def test_required_test_target_must_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            directory = Path(temp_dir)
+            manifest = directory / "QualityHost.bproj"
+            manifest.write_text(
+                'QualityHost {\n  name = "QualityHost"\n}\n\ntarget "app" {\n  kind  = App\n  entry = "Main.bd"\n}\n',
+                encoding="utf-8",
+            )
+
+            with patch("quality._run_cli") as run_cli:
+                quality._run_project_tests("/fake/beskid", directory, manifest, required=False)
+                with self.assertRaisesRegex(quality.QualityFailure, "declares no `kind = Test` target"):
+                    quality._run_project_tests("/fake/beskid", directory, manifest, required=True)
+            run_cli.assert_not_called()
+
+    def test_required_templates_ship_a_test_target(self) -> None:
+        for member in sorted(quality.TEST_TARGET_MEMBERS):
+            with self.subTest(member=member):
+                manifest = quality.ROOT / "packages" / member / "content" / "{{name}}.bproj"
+
+                self.assertEqual(quality._test_targets(manifest), ["tests"])
 
 if __name__ == "__main__":
     unittest.main()

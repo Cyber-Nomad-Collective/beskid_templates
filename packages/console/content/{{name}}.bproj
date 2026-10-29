@@ -8,3 +8,8 @@ target "app" {
   kind  = App
   entry = "Main.bd"
 }
+
+target "tests" {
+  kind  = Test
+  entry = "MainTests.bd"
+}

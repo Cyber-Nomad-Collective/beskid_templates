@@ -48,6 +48,11 @@ CORELIB_AGGREGATE_LOCK_NAME = "Core"
 # 0.6.7 lock format: Corelib rows name the toolchain's shared Corelib, read in place.
 LOCK_HEADER = "# Project.lock v3"
 TOKEN = re.compile(r"\{\{[^{}]+\}\}")
+TARGET_BLOCK = re.compile(r'^target\s+"([^"]+)"\s*\{([^}]*)\}', re.MULTILINE)
+TEST_RESULT = re.compile(r"Result: passed=(\d+), failed=(\d+)")
+# Templates whose generated project must ship a `kind = Test` target with passing tests.
+# `lib` joins once a plain `beskid build` builds its Lib target instead of a Test target.
+TEST_TARGET_MEMBERS = frozenset({"console"})
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
@@ -417,7 +422,10 @@ def _failure_category(stage: str, output: str) -> str:
     text = ANSI_ESCAPE.sub("", output).lower()
     patterns = (
         ("infrastructure", ("runtime kit", "corelib root", "corelib not found", "could not resolve corelib")),
-        ("parser", ("parse error", "parser error", "syntax error", "unexpected token", "expected expression")),
+        (
+            "parser",
+            ("parse error", "parser error", "syntax error", "unexpected token", "expected expression", "while parsing"),
+        ),
         (
             "semantic analysis",
             ("semantic error", "unresolved name", "unknown type", "type mismatch", "missing entrypoint", "e20"),
@@ -434,6 +442,7 @@ def _failure_category(stage: str, output: str) -> str:
         "analysis": "semantic analysis",
         "build": "lowering",
         "run": "runtime",
+        "test": "runtime",
     }.get(stage, stage)
 
 
@@ -450,7 +459,7 @@ def _run_cli(
     cwd: Path,
     timeout: int = TIMEOUT_SECONDS,
     stage: str,
-) -> None:
+) -> str:
     command = [cli, *arguments]
     environment = os.environ.copy()
     environment.update({"NO_COLOR": "1", "TERM": "dumb"})
@@ -484,6 +493,7 @@ def _run_cli(
             completed=result.returncode > 0,
         )
     print(f"quality check: {Path(cli).name} {stage}=PASS")
+    return result.stdout
 
 
 def _verify_invalid_fixture(cli: str, directory: Path) -> None:
@@ -675,6 +685,47 @@ def _raise_collected_failures(failures: list[QualityFailure]) -> None:
     raise QualityFailure(failures[0].stage, categories, details)
 
 
+def _test_targets(manifest: Path) -> list[str]:
+    """Names of the `kind = Test` targets declared in ``manifest``, in manifest order."""
+    targets: list[str] = []
+    for match in TARGET_BLOCK.finditer(manifest.read_text(encoding="utf-8")):
+        if _manifest_assignments(match.group(2)).get("kind") == "Test":
+            targets.append(match.group(1))
+    return targets
+
+
+def _passed_test_count(output: str, context: str) -> int:
+    """Passed-test count of a `beskid test` run; no result line, a failure or zero tests fail."""
+    results = TEST_RESULT.findall(ANSI_ESCAPE.sub("", output))
+    if not results:
+        raise QualityFailure("test", "runtime", f"{context}: `beskid test` printed no result line\n{_diagnostic_excerpt(output)}")
+    passed, failed = (int(value) for value in results[-1])
+    if failed:
+        raise QualityFailure("test", "runtime", f"{context}: {failed} test(s) failed\n{_diagnostic_excerpt(output)}")
+    if passed < 1:
+        raise QualityFailure("test", "runtime", f"{context}: the Test target ran no tests")
+    return passed
+
+
+def _run_project_tests(cli: str, directory: Path, manifest: Path, *, required: bool) -> None:
+    """Run `beskid test` on every Test target of a generated project."""
+    targets = _test_targets(manifest)
+    if not targets:
+        if required:
+            raise QualityFailure("test", "generation", f"{manifest}: generated project declares no `kind = Test` target")
+        print(f"quality check: {manifest.name} test=NOT_APPLICABLE (no Test target)")
+        return
+    for target in targets:
+        output = _run_cli(
+            cli,
+            ["test", "--project", str(manifest), "--target", target, "--locked", "--plain"],
+            cwd=directory,
+            stage="test",
+        )
+        passed = _passed_test_count(output, f"{manifest.name} target {target}")
+        print(f"quality check: {manifest.name} test target={target}:PASS ({passed} passed)")
+
+
 def _check_project(
     cli: str,
     directory: Path,
@@ -684,6 +735,7 @@ def _check_project(
     run: bool,
     failures: list[QualityFailure],
     requested_name: str,
+    tests_required: bool = False,
 ) -> Path:
     manifest = _project_manifest(directory)
     _collect_failure(failures, lambda: _validate_generated_manifest(manifest, requested_name))
@@ -702,6 +754,7 @@ def _check_project(
             failures,
             lambda: _run_cli(cli, ["run", "--project", str(manifest), "--locked", "--plain"], cwd=directory, stage="run"),
         )
+    _collect_failure(failures, lambda: _run_project_tests(cli, directory, manifest, required=tests_required))
     return manifest
 
 
@@ -758,6 +811,8 @@ def _check_generated_templates(cli: str, corelib_root: Path) -> list[str]:
                     failures,
                     lambda: _run_cli(cli, ["run", "--project", str(app_manifest), "--locked", "--plain"], cwd=output, stage="run"),
                 )
+                _collect_failure(failures, lambda: _run_project_tests(cli, output / "app", app_manifest, required=False))
+                _collect_failure(failures, lambda: _run_project_tests(cli, output / "lib", lib_manifest, required=False))
                 _raise_collected_failures(failures)
                 return
             if member == "contract_item":
@@ -822,7 +877,16 @@ def _check_generated_templates(cli: str, corelib_root: Path) -> list[str]:
                 _raise_collected_failures(failures)
                 return
             executable = member in {"console", "host", "fiber_demo"}
-            _check_project(cli, output, corelib_root, build=True, run=executable, failures=failures, requested_name=value)
+            _check_project(
+                cli,
+                output,
+                corelib_root,
+                build=True,
+                run=executable,
+                failures=failures,
+                requested_name=value,
+                tests_required=member in TEST_TARGET_MEMBERS,
+            )
             _raise_collected_failures(failures)
 
         for member, *_ in TEMPLATE_MEMBERS:

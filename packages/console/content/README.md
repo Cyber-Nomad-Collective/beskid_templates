@@ -6,4 +6,5 @@ Beskid console application created from `beskid.templates.console`.
 beskid check
 beskid build
 beskid run
+beskid test
 ```
