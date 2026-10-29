@@ -51,8 +51,7 @@ TOKEN = re.compile(r"\{\{[^{}]+\}\}")
 TARGET_BLOCK = re.compile(r'^target\s+"([^"]+)"\s*\{([^}]*)\}', re.MULTILINE)
 TEST_RESULT = re.compile(r"Result: passed=(\d+), failed=(\d+)")
 # Templates whose generated project must ship a `kind = Test` target with passing tests.
-# `lib` joins once a plain `beskid build` builds its Lib target instead of a Test target.
-TEST_TARGET_MEMBERS = frozenset({"console"})
+TEST_TARGET_MEMBERS = frozenset({"console", "lib"})
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The `lib` template ships a `tests` target (`kind = Test`, `Src/LibTests.bd`) and
+  its `Lib.bd` declares `Greet` in place of the `Placeholder` type. The quality
+  gate requires the Test target for `lib`. This needs a 0.6.7 CLI whose plain
+  `beskid build` builds the Lib target, not the Test target.
 - The `console` template ships a `tests` target (`kind = Test`, `Src/MainTests.bd`)
   and its README lists `beskid test`. The quality gate runs `beskid test` on every
   Test target of each generated project, fails when a target runs no tests or a

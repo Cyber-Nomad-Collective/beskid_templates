@@ -1,6 +1,7 @@
 // Library root for {{name}}.
 
-pub type Placeholder
+/// Greets `who` by name.
+pub string Greet(string who)
 {
-    i32 value;
+    return "Hello, " + who + "!";
 }

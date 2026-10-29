@@ -1,0 +1,9 @@
+// Tests for {{name}}. Run them with `beskid test`.
+
+use Lib;
+use Testing.Assert;
+
+test GreetNamesTheGuest
+{
+    Assert.Equal(Lib.Greet("Beskid"), "Hello, Beskid!", "greeting");
+}

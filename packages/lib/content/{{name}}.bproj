@@ -8,3 +8,8 @@ target "lib" {
   kind  = Lib
   entry = "Lib.bd"
 }
+
+target "tests" {
+  kind  = Test
+  entry = "LibTests.bd"
+}
